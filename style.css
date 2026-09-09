@@ -1465,19 +1465,26 @@ body {
 .att-cell { position: relative; }
 .att-cell-menu-btn {
     position: absolute;
-    top: 2px;
-    right: 3px;
-    font-size: 11px;
-    color: #9ca3af;
+    top: 1px;
+    right: 1px;
+    font-size: 14px;
+    font-weight: 700;
+    color: #2563eb;
+    background: rgba(37, 99, 235, 0.12);
     cursor: pointer;
-    padding: 0 3px;
+    padding: 1px 5px;
     line-height: 1;
-    border-radius: 3px;
-    opacity: 0;
-    transition: opacity .15s, background .15s;
+    border-radius: 4px;
+    opacity: 0.55;
+    transition: opacity .15s, background .15s, color .15s, transform .15s;
 }
 .att-cell:hover .att-cell-menu-btn { opacity: 1; }
-.att-cell-menu-btn:hover { background: rgba(0,0,0,0.08); color: #374151; }
+.att-cell-menu-btn:hover {
+    background: #2563eb;
+    color: #fff;
+    transform: scale(1.15);
+    box-shadow: 0 2px 6px rgba(37, 99, 235, 0.4);
+}
 
 /* cell 5 状态菜单（绝对定位浮层） */
 .att-cell-menu {

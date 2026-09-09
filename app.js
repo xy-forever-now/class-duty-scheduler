@@ -727,7 +727,7 @@ function openAttendanceNoteDialog(date, studentName, status, prefilledNote) {
     dlg.dataset.status = status;
     $('attendanceNoteLabel').textContent = `${date} · ${studentName} · ${ATTENDANCE_LABELS[status]}`;
     $('attendanceNoteInput').value = prefilledNote || '';
-    $('attendanceNoteInput').placeholder = status === 'leave' ? '请填写请假事由（病假/事假等）' : '请填写补到说明';
+    $('attendanceNoteInput').placeholder = status === 'leave' ? '请假事由（可选，如 病假/事假）' : '补到说明（可选）';
     dlg.classList.remove('hidden');
     setTimeout(() => $('attendanceNoteInput').focus(), 50);
 }
@@ -744,10 +744,7 @@ function confirmAttendanceNote() {
     const studentName = dlg.dataset.student;
     const status = dlg.dataset.status;
     const note = $('attendanceNoteInput').value.trim();
-    if (!note) {
-        showToast(status === 'leave' ? '请假需填写事由' : '补到需填写说明', 'warning');
-        return;
-    }
+    // 事由可选：留空也保存，按钮文案提示「可选」
     setAttendanceCell(date, studentName, status, note);
     closeAttendanceNoteDialog();
     renderAttendancePage();
