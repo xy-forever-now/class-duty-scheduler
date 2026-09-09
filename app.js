@@ -634,7 +634,7 @@ function renderAttendanceTable() {
         });
         const rate = cntTracked === 0 ? '-' : Math.round((cntP / cntTracked) * 100) + '%';
         const checked = state.attendance.selected[s.name] ? 'checked' : '';
-        tbody.push(`<tr${s.resting ? ' class="att-row-resting"' : ''}><td class="att-td-student"><label class="att-student-check"><input type="checkbox" class="att-row-select" data-student="${escapeAttr(s.name)}" ${checked}><span class="att-student-name">${escapeHtml(s.name)}</span><span class="att-student-gender ${s.gender === '男' ? 'male' : 'female'}">${s.gender || ''}</span></label></td>${cells.join('')}<td class="att-td-stat att-stat-present">${cntP}</td><td class="att-td-stat att-stat-late">${cntL}</td><td class="att-td-stat att-stat-leave">${cntLv}</td><td class="att-td-stat att-stat-makeup">${cntM}</td><td class="att-td-stat att-stat-rate">${rate}</td></tr>`);
+        tbody.push(`<tr${s.resting ? ' class="att-row-resting"' : ''}><td class="att-td-student"><label class="att-student-check"><input type="checkbox" class="att-row-select" data-student="${escapeAttr(s.name)}" ${checked}><span class="att-student-name">${escapeHtml(s.name)}</span></label></td>${cells.join('')}<td class="att-td-stat att-stat-present">${cntP}</td><td class="att-td-stat att-stat-late">${cntL}</td><td class="att-td-stat att-stat-leave">${cntLv}</td><td class="att-td-stat att-stat-makeup">${cntM}</td><td class="att-td-stat att-stat-rate">${rate}</td></tr>`);
     });
 
     container.innerHTML = `<div class="attendance-table-scroll"><table class="attendance-table"><thead>${thead.join('')}</thead><tbody>${tbody.join('')}</tbody></table></div>`;
@@ -910,7 +910,7 @@ function exportAttendanceExcel(mode) {
     });
     data.push(head);
     targets.forEach(s => {
-        const row = [`${s.name}${s.gender ? '(' + s.gender + ')' : ''}`];
+        const row = [s.name];
         dates.forEach(d => {
             const cell = getAttendanceCell(d, s.name);
             if (!cell.status) { row.push(''); return; }
@@ -1115,7 +1115,7 @@ function renderScoreRanking() {
         const a = agg[s.name] || { total: 0, plus: 0, minus: 0, recent: [] };
         const trend = a.recent.map(d => `<span class="score-trend ${d > 0 ? 'plus' : (d < 0 ? 'minus' : 'zero')}">${d > 0 ? '+' : ''}${d}</span>`).join('');
         const medal = s.resting ? '<span class="score-rest-mark">轮空</span>' : '';
-        return `<tr data-student="${escapeAttr(s.name)}" class="score-row"><td class="score-rank">—</td><td class="score-name"><span class="att-student-name">${escapeHtml(s.name)}</span><span class="att-student-gender ${s.gender === '男' ? 'male' : 'female'}">${s.gender || ''}</span>${medal}</td><td class="score-total ${a.total > 0 ? 'plus' : (a.total < 0 ? 'minus' : 'zero')}">${a.total}</td><td class="score-plus">+${a.plus}</td><td class="score-minus">${a.minus}</td><td class="score-trend-cell">${trend || '<span class="score-trend zero">-</span>'}</td><td class="score-actions-cell"><button class="btn btn-mini btn-mini-plus" data-act="plus">+</button><button class="btn btn-mini btn-mini-minus" data-act="minus">−</button></td></tr>`;
+        return `<tr data-student="${escapeAttr(s.name)}" class="score-row"><td class="score-rank">—</td><td class="score-name"><span class="att-student-name">${escapeHtml(s.name)}</span>${medal}</td><td class="score-total ${a.total > 0 ? 'plus' : (a.total < 0 ? 'minus' : 'zero')}">${a.total}</td><td class="score-plus">+${a.plus}</td><td class="score-minus">${a.minus}</td><td class="score-trend-cell">${trend || '<span class="score-trend zero">-</span>'}</td><td class="score-actions-cell"><button class="btn btn-mini btn-mini-plus" data-act="plus">+</button><button class="btn btn-mini btn-mini-minus" data-act="minus">−</button></td></tr>`;
     });
     // 排序：按 total 降序，0 分和未出现的靠后
     rows.sort((a, b) => {
@@ -1179,7 +1179,7 @@ function renderScoreDetail() {
             const label = v ? (v > 0 ? '+' + v : v) : '-';
             cells.push(`<td class="att-cell ${cls}">${label}</td>`);
         });
-        tbody.push(`<tr${s.resting ? ' class="att-row-resting"' : ''}><td class="att-td-student"><span class="att-student-name">${escapeHtml(s.name)}</span><span class="att-student-gender ${s.gender === '男' ? 'male' : 'female'}">${s.gender || ''}</span></td>${cells.join('')}<td class="att-td-stat att-stat-present">+${plus}</td><td class="att-td-stat att-stat-late">${minus}</td><td class="att-td-stat att-stat-rate">${plus + minus}</td></tr>`);
+        tbody.push(`<tr${s.resting ? ' class="att-row-resting"' : ''}><td class="att-td-student"><span class="att-student-name">${escapeHtml(s.name)}</span></td>${cells.join('')}<td class="att-td-stat att-stat-present">+${plus}</td><td class="att-td-stat att-stat-late">${minus}</td><td class="att-td-stat att-stat-rate">${plus + minus}</td></tr>`);
     });
 
     container.innerHTML = `<div class="attendance-table-scroll"><table class="score-table"><thead>${thead.join('')}</thead><tbody>${tbody.join('')}</tbody></table></div>`;
@@ -1243,7 +1243,7 @@ function exportScoreExcel() {
     const agg = aggregateByStudent();
     const rows = state.students.map(s => {
         const a = agg[s.name] || { total: 0, plus: 0, minus: 0, recent: [] };
-        return [s.name + (s.gender ? '(' + s.gender + ')' : ''), a.plus, a.minus, a.total];
+        return [s.name, a.plus, a.minus, a.total];
     }).sort((a, b) => b[3] - a[3]);
     const data = [
         ['积分统计（' + ymd(new Date()) + '）'],
@@ -2163,14 +2163,9 @@ function renderRollHistory() {
         return;
     }
     list.innerHTML = state.rollcall.history.map((name, idx) => {
-        const stu = state.students.find(s => s.name === name);
-        const genderCls = stu && stu.gender === '男' ? 'male'
-            : stu && stu.gender === '女' ? 'female' : '';
-        const tag = stu && stu.gender ? stu.gender : '';
         return `<div class="rollcall-history-item">
             <span class="rollcall-history-idx">${idx + 1}</span>
             <span class="rollcall-history-name">${name}</span>
-            ${tag ? `<span class="student-gender ${genderCls}">${tag}</span>` : ''}
         </div>`;
     }).join('');
 }
