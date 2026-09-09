@@ -1436,6 +1436,135 @@ body {
     box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
 }
 
+/* ===== 考勤增强 ===== */
+.att-quick-range {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.att-quick-range .btn { flex: 1; min-width: 0; }
+
+/* 表格行内复选框 + 名字同行 */
+.attendance-table .att-td-student { padding: 0 8px; }
+.att-student-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+.att-student-check input[type="checkbox"] {
+    cursor: pointer;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+}
+.att-row-select { accent-color: #2563eb; }
+
+/* cell 右上角小菜单按钮（默认隐藏，hover 显示） */
+.att-cell { position: relative; }
+.att-cell-menu-btn {
+    position: absolute;
+    top: 2px;
+    right: 3px;
+    font-size: 11px;
+    color: #9ca3af;
+    cursor: pointer;
+    padding: 0 3px;
+    line-height: 1;
+    border-radius: 3px;
+    opacity: 0;
+    transition: opacity .15s, background .15s;
+}
+.att-cell:hover .att-cell-menu-btn { opacity: 1; }
+.att-cell-menu-btn:hover { background: rgba(0,0,0,0.08); color: #374151; }
+
+/* cell 5 状态菜单（绝对定位浮层） */
+.att-cell-menu {
+    position: absolute;
+    z-index: 1000;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    min-width: 140px;
+    padding: 4px 0;
+    font-size: 13px;
+}
+.att-cell-menu.hidden { display: none; }
+.att-cell-menu-title {
+    padding: 6px 12px;
+    color: #6b7280;
+    font-size: 12px;
+    border-bottom: 1px solid #f3f4f6;
+}
+.att-cell-menu-item {
+    padding: 7px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background .12s;
+}
+.att-cell-menu-item:hover { background: #f3f4f6; }
+.att-cell-menu-sep {
+    height: 1px;
+    background: #f3f4f6;
+    margin: 4px 0;
+}
+.att-cell-menu-clear {
+    color: #dc2626;
+    font-weight: 500;
+}
+.att-cell-menu-clear:hover { background: #fef2f2; }
+.att-cell-menu-item .dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+.dot-present { background: #10b981; }
+.dot-late    { background: #f59e0b; }
+.dot-leave   { background: #6b7280; }
+.dot-makeup  { background: #3b82f6; }
+
+/* 导出按钮下拉 */
+.btn-group { position: relative; display: inline-block; }
+.btn-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    right: 0;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    min-width: 180px;
+    padding: 4px 0;
+    z-index: 100;
+    font-size: 13px;
+}
+.btn-dropdown.hidden { display: none; }
+.btn-dropdown-item {
+    padding: 8px 14px;
+    cursor: pointer;
+    color: #374151;
+    transition: background .12s;
+}
+.btn-dropdown-item:hover { background: #f3f4f6; }
+.btn-dropdown-sep {
+    height: 1px;
+    background: #f3f4f6;
+    margin: 4px 0;
+}
+.btn-dropdown-tip {
+    color: #9ca3af;
+    font-size: 12px;
+    cursor: default;
+    padding: 6px 14px;
+}
+.btn-dropdown-tip:hover { background: transparent; }
+
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
     .nav-menu:not(.collapsed) {

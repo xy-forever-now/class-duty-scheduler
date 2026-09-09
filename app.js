@@ -30,6 +30,7 @@ const state = {
         anchorDate: null,     // 当前查看锚点（YYYY-MM-DD）
         records: {},          // { 'YYYY-MM-DD': { studentName: { status, note } } }
         initializedAt: null,
+        selected: {},         // { studentName: true } 导出选中用
     },
     score: {                                                          // 积分统计
         view: 'ranking',      // 'ranking' | 'detail'
@@ -629,10 +630,11 @@ function renderAttendanceTable() {
             const noteAttr = cell.note ? ` data-note="${escapeAttr(cell.note)}"` : '';
             const label = status ? ATTENDANCE_LABELS[status] : '-';
             const noteMark = cell.note ? '<span class="att-note-mark" title="' + escapeAttr(cell.note) + '">📝</span>' : '';
-            cells.push(`<td class="att-cell ${statusCls}" data-date="${d}" data-student="${escapeAttr(s.name)}" data-idx="${idx}"${noteAttr}><span class="att-cell-label">${label}</span>${noteMark}</td>`);
+            cells.push(`<td class="att-cell ${statusCls}" data-date="${d}" data-student="${escapeAttr(s.name)}" data-idx="${idx}"${noteAttr}><span class="att-cell-label">${label}</span>${noteMark}<span class="att-cell-menu-btn" title="选择状态">⋮</span></td>`);
         });
         const rate = cntTracked === 0 ? '-' : Math.round((cntP / cntTracked) * 100) + '%';
-        tbody.push(`<tr${s.resting ? ' class="att-row-resting"' : ''}><td class="att-td-student"><span class="att-student-name">${escapeHtml(s.name)}</span><span class="att-student-gender ${s.gender === '男' ? 'male' : 'female'}">${s.gender || ''}</span></td>${cells.join('')}<td class="att-td-stat att-stat-present">${cntP}</td><td class="att-td-stat att-stat-late">${cntL}</td><td class="att-td-stat att-stat-leave">${cntLv}</td><td class="att-td-stat att-stat-makeup">${cntM}</td><td class="att-td-stat att-stat-rate">${rate}</td></tr>`);
+        const checked = state.attendance.selected[s.name] ? 'checked' : '';
+        tbody.push(`<tr${s.resting ? ' class="att-row-resting"' : ''}><td class="att-td-student"><label class="att-student-check"><input type="checkbox" class="att-row-select" data-student="${escapeAttr(s.name)}" ${checked}><span class="att-student-name">${escapeHtml(s.name)}</span><span class="att-student-gender ${s.gender === '男' ? 'male' : 'female'}">${s.gender || ''}</span></label></td>${cells.join('')}<td class="att-td-stat att-stat-present">${cntP}</td><td class="att-td-stat att-stat-late">${cntL}</td><td class="att-td-stat att-stat-leave">${cntLv}</td><td class="att-td-stat att-stat-makeup">${cntM}</td><td class="att-td-stat att-stat-rate">${rate}</td></tr>`);
     });
 
     container.innerHTML = `<div class="attendance-table-scroll"><table class="attendance-table"><thead>${thead.join('')}</thead><tbody>${tbody.join('')}</tbody></table></div>`;
@@ -656,6 +658,15 @@ function onAttendanceCellClick(e) {
     const date = td.dataset.date;
     const studentName = td.dataset.student;
     if (!date || !studentName) return;
+
+    // 点 ⋮ 按钮 → 弹出状态菜单
+    if (e.target.classList.contains('att-cell-menu-btn')) {
+        e.stopPropagation();
+        openAttendanceCellMenu(date, studentName, td);
+        return;
+    }
+
+    // 单击主体 → 维持原来的循环切换（向后兼容老用户习惯）
     const cur = getAttendanceCell(date, studentName);
     const nxt = nextStatus(cur.status);
 
@@ -666,6 +677,46 @@ function onAttendanceCellClick(e) {
         renderAttendancePage();
         saveStateDebounced();
     }
+}
+
+// 弹出 cell 5 状态菜单
+function openAttendanceCellMenu(date, studentName, anchorTd) {
+    const menu = $('attendanceCellMenu');
+    if (!menu) return;
+    menu.dataset.date = date;
+    menu.dataset.student = studentName;
+    $('attCellMenuLabel').textContent = `${date} · ${studentName}`;
+    // 定位到 anchorTd 旁边
+    const rect = anchorTd.getBoundingClientRect();
+    menu.style.top = (window.scrollY + rect.bottom + 4) + 'px';
+    menu.style.left = (window.scrollX + rect.left) + 'px';
+    menu.classList.remove('hidden');
+}
+function closeAttendanceCellMenu() {
+    const menu = $('attendanceCellMenu');
+    if (menu) menu.classList.add('hidden');
+}
+function applyAttendanceCellMenu(status) {
+    const menu = $('attendanceCellMenu');
+    if (!menu) return;
+    const date = menu.dataset.date;
+    const studentName = menu.dataset.student;
+    if (!date || !studentName) return;
+
+    if (!status) {
+        // 清除记录
+        setAttendanceCell(date, studentName, null, '');
+    } else if (status === 'leave' || status === 'makeup') {
+        const cur = getAttendanceCell(date, studentName);
+        openAttendanceNoteDialog(date, studentName, status, cur.note || '');
+        closeAttendanceCellMenu();
+        return;
+    } else {
+        setAttendanceCell(date, studentName, status, '');
+    }
+    closeAttendanceCellMenu();
+    renderAttendancePage();
+    saveStateDebounced();
 }
 
 function openAttendanceNoteDialog(date, studentName, status, prefilledNote) {
@@ -752,7 +803,7 @@ function initAttendanceFromStudents() {
         return;
     }
     if (Object.keys(state.attendance.records).length > 0) {
-        if (!confirm('已有考勤记录，确认要再次初始化吗？\n（已有记录不会被清空，仅补齐缺失学生）')) return;
+        if (!confirm('已有考勤记录确认要再次初始化吗？\n（已有记录不会被清空，仅补齐缺失学生）')) return;
     } else {
         if (!confirm('将从学生名单初始化考勤表，确认？')) return;
     }
@@ -763,23 +814,102 @@ function initAttendanceFromStudents() {
     saveStateDebounced();
 }
 
-function exportAttendanceExcel() {
+// ===== 一键全员出勤 =====
+function openAttendanceAllPresent() {
+    if (state.students.length === 0) {
+        showToast('请先导入学生数据', 'warning');
+        return;
+    }
+    const today = ymd(new Date());
+    const fromEl = $('attAllFrom');
+    const toEl = $('attAllTo');
+    if (fromEl && !fromEl.value) fromEl.value = today;
+    if (toEl && !toEl.value) toEl.value = today;
+    $('attendanceAllPresentDialog').classList.remove('hidden');
+}
+function closeAttendanceAllPresent() {
+    $('attendanceAllPresentDialog').classList.add('hidden');
+}
+function setAttendanceAllPresentRange(quick) {
+    const today = ymd(new Date());
+    const fromEl = $('attAllFrom');
+    const toEl = $('attAllTo');
+    if (!fromEl || !toEl) return;
+    if (quick === 'today') {
+        fromEl.value = today; toEl.value = today;
+    } else if (quick === 'week') {
+        const dates = getWeekDates(today);
+        fromEl.value = dates[0]; toEl.value = dates[dates.length - 1];
+    } else if (quick === 'month') {
+        const dates = getMonthDates(today);
+        fromEl.value = dates[0]; toEl.value = dates[dates.length - 1];
+    }
+}
+function confirmAttendanceAllPresent() {
+    const from = $('attAllFrom').value;
+    const to = $('attAllTo').value;
+    const skipExisting = $('attAllSkip').checked;
+    if (!from || !to) { showToast('请选择起止日期', 'warning'); return; }
+    if (from > to) { showToast('起始日期不能晚于结束日期', 'warning'); return; }
+
+    // 生成日期数组
+    const dates = [];
+    let cur = parseYmd(from);
+    const end = parseYmd(to);
+    while (cur <= end) {
+        dates.push(ymd(cur));
+        cur.setDate(cur.getDate() + 1);
+    }
+
+    const active = activeStudents();
+    let set = 0, skipped = 0;
+    dates.forEach(d => {
+        if (!state.attendance.records[d]) state.attendance.records[d] = {};
+        active.forEach(s => {
+            const cur = state.attendance.records[d][s.name];
+            if (skipExisting && cur && cur.status && cur.status !== 'present') { skipped++; return; }
+            state.attendance.records[d][s.name] = { status: 'present', note: '' };
+            set++;
+        });
+    });
+
+    closeAttendanceAllPresent();
+    renderAttendancePage();
+    saveStateDebounced();
+    showToast(`✅ 一键出勤完成：写入 ${set} 条${skipped ? `，跳过 ${skipped} 条已标记状态` : ''}`, 'success');
+}
+
+
+function exportAttendanceExcel(mode) {
     if (state.students.length === 0) {
         showToast('暂无考勤数据可导出', 'warning');
         return;
+    }
+    mode = mode || 'all';
+    // 决定导出哪些学生
+    let targets;
+    if (mode === 'selected') {
+        targets = state.students.filter(s => state.attendance.selected[s.name]);
+        if (targets.length === 0) {
+            showToast('尚未选中任何学生，请在表格左侧勾选', 'warning');
+            return;
+        }
+    } else {
+        targets = state.students.slice();
     }
     const dates = state.attendance.view === 'month'
         ? getMonthDates(state.attendance.anchorDate)
         : getWeekDates(state.attendance.anchorDate);
     const data = [];
-    data.push([`考勤记录（${dates[0]} ~ ${dates[dates.length - 1]}）`]);
+    const scopeLabel = mode === 'selected' ? `（已选 ${targets.length} 人）` : '（全部学生）';
+    data.push([`考勤记录${scopeLabel}（${dates[0]} ~ ${dates[dates.length - 1]}）`]);
     const head = ['学生'];
     dates.forEach(d => {
         const dt = parseYmd(d);
         head.push(`${d} ${DAY_NAMES[dt.getDay()]}`);
     });
     data.push(head);
-    state.students.forEach(s => {
+    targets.forEach(s => {
         const row = [`${s.name}${s.gender ? '(' + s.gender + ')' : ''}`];
         dates.forEach(d => {
             const cell = getAttendanceCell(d, s.name);
@@ -788,12 +918,13 @@ function exportAttendanceExcel() {
         });
         data.push(row);
     });
-    // 每日出勤汇总
+    // 每日出勤汇总（仅计被导出的非轮空学生）
     data.push([]);
     data.push(['每日出勤 X/Y']);
     dates.forEach(d => {
         let p = 0, total = 0;
-        activeStudents().forEach(s => {
+        targets.forEach(s => {
+            if (s.resting) return;
             const c = getAttendanceCell(d, s.name);
             if (c.status) { total++; if (c.status === 'present') p++; }
         });
@@ -804,7 +935,7 @@ function exportAttendanceExcel() {
     ws['!cols'] = [{ wch: 16 }, ...dates.map(() => ({ wch: 14 }))];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '考勤');
-    const fname = `考勤_${dates[0]}_${dates[dates.length - 1]}${state.attendance.view === 'month' ? '_月' : '_周'}.xlsx`;
+    const fname = `考勤_${mode === 'selected' ? '选中' : '全部'}_${dates[0]}_${dates[dates.length - 1]}${state.attendance.view === 'month' ? '_月' : '_周'}.xlsx`;
     XLSX.writeFile(wb, fname);
     showToast('Excel 导出成功', 'success');
 }
@@ -2069,8 +2200,77 @@ if ($('btnAttendanceNext')) $('btnAttendanceNext').addEventListener('click', () 
     renderAttendancePage(); saveStateDebounced();
 });
 if ($('btnAttendanceInit')) $('btnAttendanceInit').addEventListener('click', initAttendanceFromStudents);
-if ($('btnAttendanceExport')) $('btnAttendanceExport').addEventListener('click', exportAttendanceExcel);
 if ($('btnAttendancePrint')) $('btnAttendancePrint').addEventListener('click', printAttendance);
+
+// 一键出勤
+if ($('btnAttendanceAllPresent')) $('btnAttendanceAllPresent').addEventListener('click', openAttendanceAllPresent);
+if ($('attendanceAllPresentCancel')) $('attendanceAllPresentCancel').addEventListener('click', closeAttendanceAllPresent);
+if ($('attendanceAllPresentOk')) $('attendanceAllPresentOk').addEventListener('click', confirmAttendanceAllPresent);
+document.querySelectorAll('[data-quick-range]').forEach(btn => {
+    btn.addEventListener('click', () => setAttendanceAllPresentRange(btn.dataset.quickRange));
+});
+
+// 导出下拉
+const _attExportBtn = $('btnAttendanceExport');
+const _attExportMenu = $('attendanceExportMenu');
+if (_attExportBtn && _attExportMenu) {
+    _attExportBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _attExportMenu.classList.toggle('hidden');
+        renderAttendanceExportSelectedCount();
+    });
+    document.addEventListener('click', (e) => {
+        if (!_attExportMenu.classList.contains('hidden') && !_attExportMenu.contains(e.target) && e.target !== _attExportBtn) {
+            _attExportMenu.classList.add('hidden');
+        }
+    });
+    _attExportMenu.querySelectorAll('.btn-dropdown-item[data-export-mode]').forEach(it => {
+        it.addEventListener('click', () => {
+            _attExportMenu.classList.add('hidden');
+            exportAttendanceExcel(it.dataset.exportMode);
+        });
+    });
+}
+function renderAttendanceExportSelectedCount() {
+    const el = $('attendanceExportSelectedCount');
+    if (!el) return;
+    const n = state.attendance.selected ? Object.keys(state.attendance.selected).length : 0;
+    el.textContent = `已选 ${n} 人`;
+}
+
+// 学生复选框：事件委托（重渲染后依然生效）
+const _attTableContainer = $('attendanceTableContainer');
+if (_attTableContainer && !_attTableContainer._selectBound) {
+    _attTableContainer.addEventListener('change', (e) => {
+        const cb = e.target.closest('.att-row-select');
+        if (!cb) return;
+        const name = cb.dataset.student;
+        if (!name) return;
+        if (cb.checked) state.attendance.selected[name] = true;
+        else delete state.attendance.selected[name];
+        saveStateDebounced();
+        renderAttendanceExportSelectedCount();
+    });
+    _attTableContainer._selectBound = true;
+}
+
+// cell 5 状态菜单
+const _attCellMenu = $('attendanceCellMenu');
+if (_attCellMenu && !_attCellMenu._menuBound) {
+    _attCellMenu.addEventListener('click', (e) => {
+        const item = e.target.closest('.att-cell-menu-item');
+        if (!item) return;
+        applyAttendanceCellMenu(item.dataset.status);
+    });
+    _attCellMenu._menuBound = true;
+}
+document.addEventListener('click', (e) => {
+    if (!_attCellMenu || _attCellMenu.classList.contains('hidden')) return;
+    if (_attCellMenu.contains(e.target)) return;
+    if (e.target.classList && e.target.classList.contains('att-cell-menu-btn')) return;
+    closeAttendanceCellMenu();
+});
+
 if ($('attendanceNoteOk')) $('attendanceNoteOk').addEventListener('click', confirmAttendanceNote);
 if ($('attendanceNoteCancel')) $('attendanceNoteCancel').addEventListener('click', cancelAttendanceNote);
 if ($('attendanceNoteInput')) $('attendanceNoteInput').addEventListener('keydown', (e) => {

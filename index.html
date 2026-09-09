@@ -302,7 +302,16 @@
                         <h2>✅ 考勤记录</h2>
                         <div>
                             <button class="btn btn-primary" id="btnAttendanceInit">📋 初始化</button>
-                            <button class="btn btn-warning" id="btnAttendanceExport">📤 导出Excel</button>
+                            <button class="btn btn-success" id="btnAttendanceAllPresent">✅ 一键出勤</button>
+                            <div class="btn-group" id="attendanceExportGroup">
+                                <button class="btn btn-warning" id="btnAttendanceExport">📤 导出Excel ▾</button>
+                                <div class="btn-dropdown hidden" id="attendanceExportMenu">
+                                    <div class="btn-dropdown-item" data-export-mode="all">导出全部学生</div>
+                                    <div class="btn-dropdown-item" data-export-mode="selected">仅导出选中学生</div>
+                                    <div class="btn-dropdown-sep"></div>
+                                    <div class="btn-dropdown-item btn-dropdown-tip" id="attendanceExportSelectedCount">已选 0 人</div>
+                                </div>
+                            </div>
                             <button class="btn btn-info" id="btnAttendancePrint">🖨️ 打印</button>
                         </div>
                     </div>
@@ -366,6 +375,52 @@
                             <button class="btn btn-secondary" id="attendanceNoteCancel">取消</button>
                             <button class="btn btn-primary" id="attendanceNoteOk">保存</button>
                         </div>
+                    </div>
+
+                    <div id="attendanceAllPresentDialog" class="attendance-note-dialog hidden">
+                        <div class="attendance-note-title">✅ 一键全员出勤</div>
+                        <div class="score-rules-note">把以下范围内<b>非轮空</b>学生全部标记为「出勤」（已有记录将被覆盖为 present）。</div>
+                        <div class="score-rules-grid">
+                            <div class="score-rules-section">
+                                <div class="score-rules-title">📅 快捷范围</div>
+                                <div class="att-quick-range">
+                                    <button class="btn btn-secondary" data-quick-range="today">仅今天</button>
+                                    <button class="btn btn-secondary" data-quick-range="week">本周</button>
+                                    <button class="btn btn-secondary" data-quick-range="month">本月</button>
+                                </div>
+                            </div>
+                            <div class="score-rules-section">
+                                <div class="score-rules-title">📆 自定义范围</div>
+                                <div class="score-rules-row">
+                                    <label>起始</label>
+                                    <input type="date" id="attAllFrom">
+                                </div>
+                                <div class="score-rules-row">
+                                    <label>结束</label>
+                                    <input type="date" id="attAllTo">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="score-rules-row" style="margin-bottom:12px;">
+                            <label>跳过已标记为「迟到/请假/补到」</label>
+                            <input type="checkbox" id="attAllSkip" checked>
+                        </div>
+                        <div class="attendance-note-actions">
+                            <button class="btn btn-secondary" id="attendanceAllPresentCancel">取消</button>
+                            <button class="btn btn-success" id="attendanceAllPresentOk">确认出勤</button>
+                        </div>
+                    </div>
+
+                    <div id="attendanceCellMenu" class="att-cell-menu hidden">
+                        <div class="att-cell-menu-title" id="attCellMenuLabel">—</div>
+                        <div class="att-cell-menu-list">
+                            <div class="att-cell-menu-item" data-status="present"><span class="dot dot-present"></span>出勤</div>
+                            <div class="att-cell-menu-item" data-status="late"><span class="dot dot-late"></span>迟到</div>
+                            <div class="att-cell-menu-item" data-status="leave"><span class="dot dot-leave"></span>请假</div>
+                            <div class="att-cell-menu-item" data-status="makeup"><span class="dot dot-makeup"></span>补到</div>
+                        </div>
+                        <div class="att-cell-menu-sep"></div>
+                        <div class="att-cell-menu-item att-cell-menu-clear" data-status="">清除本条记录</div>
                     </div>
                 </section>
 
