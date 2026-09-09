@@ -31,6 +31,10 @@ const state = {
         records: {},          // { 'YYYY-MM-DD': { studentName: { status, note } } }
         initializedAt: null,
     },
+    score: {                                                          // 积分统计
+        view: 'ranking',      // 'ranking' | 'detail'
+        log: [],              // { id, ts, date, studentName, source, delta, reason }
+    },
 };
 
 // ===== 工具函数 =====
@@ -63,6 +67,7 @@ function saveState() {
             dutyCounts: state.dutyCounts,
             seatingConfig: state.seatingConfig,
             attendance: state.attendance,
+            score: state.score,
             savedAt: Date.now(),
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -107,7 +112,7 @@ const pageTitles = {
     students: { title: '👥 学生管理', sub: '查看与管理班级学生' },
     rollcall: { title: '🎯 随机点名', sub: '从非轮空学生中随机抽取' },
     attendance: { title: '✅ 考勤记录', sub: '每日打卡 · 周/月统计' },
-    score: { title: '📊 积分统计', sub: '即将上线' },
+    score: { title: '📊 积分统计', sub: '考勤/值班/点名自动联动 · 排行榜' },
     notice: { title: '📢 班级通知', sub: '即将上线' },
     settings: { title: '🔧 系统设置', sub: '即将上线' },
 };
@@ -150,6 +155,7 @@ function switchPage(pageName) {
         if (state.schedule) renderDutyTable();
     }
     if (pageName === 'attendance') renderAttendancePage();
+    if (pageName === 'score') renderScorePage();
 
     state.currentPage = pageName;
 }
@@ -417,7 +423,7 @@ $('btnClearStudents').addEventListener('click', () => {
         showToast('当前没有学生数据', 'info');
         return;
     }
-    if (confirm(`确认清空全部 ${state.students.length} 名学生？\n\n将同时清空：\n· 值班表\n· 座位表\n· 随机点名记录\n· 考勤记录\n· 本地所有缓存\n\n此操作不可撤销。`)) {
+    if (confirm(`确认清空全部 ${state.students.length} 名学生？\n\n将同时清空：\n· 值班表\n· 座位表\n· 随机点名记录\n· 考勤记录\n· 积分记录\n· 本地所有缓存\n\n此操作不可撤销。`)) {
         // 1) 重置所有运行时结果数据（配置项保留：起始日期/周期/策略/职务数/座位行列/点名选项）
         state.students = [];
         state.schedule = null;
@@ -425,6 +431,7 @@ $('btnClearStudents').addEventListener('click', () => {
         state.rollcall.history = [];
         state.rollcall.lastResult = null;
         state.attendance = { view: 'week', anchorDate: null, records: {}, initializedAt: null };
+        state.score = { view: 'ranking', log: [] };
 
         // 2) 清空 localStorage 中本应用的所有键（含历史版本残留）
         try {
@@ -454,6 +461,9 @@ $('btnClearStudents').addEventListener('click', () => {
         }
         if (state.currentPage === 'attendance' && typeof renderAttendancePage === 'function') {
             renderAttendancePage();
+        }
+        if (state.currentPage === 'score' && typeof renderScorePage === 'function') {
+            renderScorePage();
         }
         setStatus('已重置全部本地记录');
 
@@ -795,6 +805,312 @@ function exportAttendanceExcel() {
 }
 
 function printAttendance() { window.print(); }
+
+// ===== 积分统计 =====
+const SCORE_RULES = {
+    attendance: { present: +1, late: -1, makeup: +2, leave: 0 },   // leave 不计分
+    duty:       +2,                                                // 完成一次值日
+    rollcall:   +1,                                                // 被点到（出勤）
+};
+
+const SCORE_REASON_PRESETS = ['+表扬', '+作业优秀', '+积极发言', '-纪律', '-作业未交', '-迟到'];
+
+function scoreKey(date, studentName, source, reason) {
+    return `${date}|${studentName}|${source}|${reason || ''}`;
+}
+
+function hasScoreEntry(date, studentName, source, reason) {
+    const k = scoreKey(date, studentName, source, reason);
+    return state.score.log.some(e => scoreKey(e.date, e.studentName, e.source, e.reason) === k);
+}
+
+function addScoreEntry(date, studentName, source, delta, reason) {
+    if (hasScoreEntry(date, studentName, source, reason)) return false;
+    state.score.log.push({
+        id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        ts: Date.now(),
+        date, studentName, source, delta, reason: reason || ''
+    });
+    return true;
+}
+
+function removeScoreEntriesByKey(date, studentName, source, reason) {
+    const k = scoreKey(date, studentName, source, reason);
+    state.score.log = state.score.log.filter(e => scoreKey(e.date, e.studentName, e.source, e.reason) !== k);
+}
+
+// 从考勤 records 补齐所有联动分；幂等：已存在的不会重复添加
+function reconcileAttendanceScores() {
+    if (!state.attendance.records) return 0;
+    let added = 0;
+    for (const date in state.attendance.records) {
+        const dayMap = state.attendance.records[date];
+        for (const name in dayMap) {
+            const cell = dayMap[name];
+            const status = cell && cell.status;
+            if (!status || !(status in SCORE_RULES.attendance)) continue;
+            const delta = SCORE_RULES.attendance[status];
+            if (delta === 0) continue;
+            const reason = `考勤·${ATTENDANCE_LABELS[status].replace(/^[^ ]+ /, '')}`;
+            if (addScoreEntry(date, name, 'attendance', delta, reason)) added++;
+        }
+    }
+    return added;
+}
+
+// 从值班表 schedule 补齐
+function reconcileDutyScores() {
+    if (!state.schedule || !state.schedule.schedule) return 0;
+    let added = 0;
+    for (const weekKey in state.schedule.schedule) {
+        state.schedule.schedule[weekKey].forEach(dayData => {
+            const date = dayData.fullDate;
+            dayData.assignments.forEach(a => {
+                a.students.forEach(stu => {
+                    const reason = `值班·${a.duty}`;
+                    if (addScoreEntry(date, stu.name, 'duty', SCORE_RULES.duty, reason)) added++;
+                });
+            });
+        });
+    }
+    return added;
+}
+
+// 从点名 history 补齐
+function reconcileRollcallScores() {
+    if (!state.rollcall || !Array.isArray(state.rollcall.history)) return 0;
+    let added = 0;
+    // 用日期粒度：用今天作为 rollcall 项目的聚合日期（rollcall 没有按日期拆分历史）
+    const date = ymd(new Date());
+    state.rollcall.history.forEach(name => {
+        if (addScoreEntry(date, name, 'rollcall', SCORE_RULES.rollcall, '点名出勤')) added++;
+    });
+    return added;
+}
+
+function reconcileScoreLog() {
+    const before = state.score.log.length;
+    reconcileAttendanceScores();
+    reconcileDutyScores();
+    reconcileRollcallScores();
+    return state.score.log.length - before;
+}
+
+function aggregateByStudent() {
+    // 返回 { studentName: { total, plus, minus, recent: [delta, ...] } }
+    const map = {};
+    state.score.log.forEach(e => {
+        if (!map[e.studentName]) map[e.studentName] = { total: 0, plus: 0, minus: 0, recent: [] };
+        map[e.studentName].total += e.delta;
+        if (e.delta > 0) map[e.studentName].plus += e.delta;
+        else if (e.delta < 0) map[e.studentName].minus += e.delta;
+        map[e.studentName].recent.push(e.delta);
+    });
+    // recent 只保留最近 5 条
+    Object.values(map).forEach(v => { v.recent = v.recent.slice(-5); });
+    return map;
+}
+
+function aggregateByDate(days) {
+    // 返回 { 'YYYY-MM-DD': { date, deltas: { name: total } } }
+    const map = {};
+    state.score.log.forEach(e => {
+        if (!map[e.date]) map[e.date] = { date: e.date, deltas: {} };
+        map[e.date].deltas[e.studentName] = (map[e.date].deltas[e.studentName] || 0) + e.delta;
+    });
+    return map;
+}
+
+function getRecentDateRange(n) {
+    const arr = [];
+    const d = new Date();
+    for (let i = n - 1; i >= 0; i--) {
+        const x = new Date(d);
+        x.setDate(d.getDate() - i);
+        arr.push(ymd(x));
+    }
+    return arr;
+}
+
+function updateScoreStats(agg) {
+    const all = Object.values(agg);
+    const total = all.reduce((s, v) => s + v.total, 0);
+    const plus  = all.reduce((s, v) => s + v.plus, 0);
+    const minus = all.reduce((s, v) => s + v.minus, 0);
+    const topName = Object.keys(agg).reduce((best, name) => {
+        if (!best) return name;
+        return agg[name].total > agg[best].total ? name : best;
+    }, null);
+    const topVal = topName ? agg[topName].total : 0;
+    if ($('scoreGrandTotal')) $('scoreGrandTotal').textContent = total;
+    if ($('scoreTotalPlus')) $('scoreTotalPlus').textContent = '+' + plus;
+    if ($('scoreTotalMinus')) $('scoreTotalMinus').textContent = minus;
+    if ($('scoreTopStudent')) $('scoreTopStudent').textContent = topName ? `${topName} ${topVal}` : '—';
+}
+
+function renderScoreRanking() {
+    const container = $('scoreTableContainer');
+    if (!container) return;
+    if (state.students.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>请先在「学生管理」导入学生数据</p></div>';
+        return;
+    }
+    const agg = aggregateByStudent();
+    // 确保每个学生都有行（即使 0 分）
+    const rows = state.students.map(s => {
+        const a = agg[s.name] || { total: 0, plus: 0, minus: 0, recent: [] };
+        const trend = a.recent.map(d => `<span class="score-trend ${d > 0 ? 'plus' : (d < 0 ? 'minus' : 'zero')}">${d > 0 ? '+' : ''}${d}</span>`).join('');
+        const medal = s.resting ? '<span class="score-rest-mark">轮空</span>' : '';
+        return `<tr data-student="${escapeAttr(s.name)}" class="score-row"><td class="score-rank">—</td><td class="score-name"><span class="att-student-name">${escapeHtml(s.name)}</span><span class="att-student-gender ${s.gender === '男' ? 'male' : 'female'}">${s.gender || ''}</span>${medal}</td><td class="score-total ${a.total > 0 ? 'plus' : (a.total < 0 ? 'minus' : 'zero')}">${a.total}</td><td class="score-plus">+${a.plus}</td><td class="score-minus">${a.minus}</td><td class="score-trend-cell">${trend || '<span class="score-trend zero">-</span>'}</td><td class="score-actions-cell"><button class="btn btn-mini btn-mini-plus" data-act="plus">+</button><button class="btn btn-mini btn-mini-minus" data-act="minus">−</button></td></tr>`;
+    });
+    // 排序：按 total 降序，0 分和未出现的靠后
+    rows.sort((a, b) => {
+        const an = nameFromRow(a), bn = nameFromRow(b);
+        const av = (agg[an] || { total: 0 }).total;
+        const bv = (agg[bn] || { total: 0 }).total;
+        if (bv !== av) return bv - av;
+        return an.localeCompare(bn, 'zh-CN');
+    });
+
+    container.innerHTML = `<div class="attendance-table-scroll"><table class="score-table"><thead><tr><th>排名</th><th>学生</th><th>总分</th><th>加分</th><th>减分</th><th>近期</th><th>操作</th></tr></thead><tbody>${rows.map((r, i) => r.replace('<td class="score-rank">—</td>', `<td class="score-rank">${i + 1}</td>`)).join('')}</tbody></table></div>`;
+
+    bindScoreRowActions(container);
+}
+
+function nameFromRow(rowHtml) {
+    const m = rowHtml.match(/data-student="([^"]+)"/);
+    return m ? decodeURIComponent(m[1]).replace(/&quot;/g, '"').replace(/&#39;/g, "'") : '';
+}
+
+function bindScoreRowActions(container) {
+    const scroll = container.querySelector('.attendance-table-scroll');
+    if (!scroll || scroll.dataset.bound) return;
+    scroll.dataset.bound = '1';
+    scroll.addEventListener('click', (e) => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const tr = btn.closest('tr.score-row');
+        if (!tr) return;
+        const name = tr.dataset.student;
+        openScoreAdjustDialog(name, btn.dataset.act === 'plus' ? 1 : -1);
+    });
+}
+
+function renderScoreDetail() {
+    const container = $('scoreTableContainer');
+    if (!container) return;
+    if (state.students.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📊</div><p>请先在「学生管理」导入学生数据</p></div>';
+        return;
+    }
+    const days = getRecentDateRange(30);
+    const dayMap = aggregateByDate(30);
+    const thead = ['<tr><th class="att-th-student">学生</th>'];
+    days.forEach(d => {
+        const isToday = d === ymd(new Date());
+        thead.push(`<th class="att-th-date${isToday ? ' today' : ''}">${d.slice(5)}</th>`);
+    });
+    thead.push('<th class="att-th-stat">加分</th><th class="att-th-stat">减分</th><th class="att-th-stat">净分</th></tr>');
+
+    const tbody = [];
+    state.students.forEach(s => {
+        const cells = [];
+        let plus = 0, minus = 0;
+        days.forEach(d => {
+            const day = dayMap[d];
+            const v = day && day.deltas[s.name];
+            if (v > 0) plus += v;
+            else if (v < 0) minus += v;
+            const cls = v > 0 ? 'cell-present' : (v < 0 ? 'cell-late' : 'cell-empty');
+            const label = v ? (v > 0 ? '+' + v : v) : '-';
+            cells.push(`<td class="att-cell ${cls}">${label}</td>`);
+        });
+        tbody.push(`<tr${s.resting ? ' class="att-row-resting"' : ''}><td class="att-td-student"><span class="att-student-name">${escapeHtml(s.name)}</span><span class="att-student-gender ${s.gender === '男' ? 'male' : 'female'}">${s.gender || ''}</span></td>${cells.join('')}<td class="att-td-stat att-stat-present">+${plus}</td><td class="att-td-stat att-stat-late">${minus}</td><td class="att-td-stat att-stat-rate">${plus + minus}</td></tr>`);
+    });
+
+    container.innerHTML = `<div class="attendance-table-scroll"><table class="score-table"><thead>${thead.join('')}</thead><tbody>${tbody.join('')}</tbody></table></div>`;
+}
+
+function renderScoreControls() {
+    const view = state.score.view;
+    const rk = $('scoreViewRanking');
+    const dt = $('scoreViewDetail');
+    if (rk) rk.classList.toggle('active', view === 'ranking');
+    if (dt) dt.classList.toggle('active', view === 'detail');
+}
+
+function renderScorePage() {
+    reconcileScoreLog();
+    renderScoreControls();
+    updateScoreStats(aggregateByStudent());
+    if (state.score.view === 'detail') renderScoreDetail();
+    else renderScoreRanking();
+}
+
+function openScoreAdjustDialog(studentName, sign) {
+    const dlg = $('scoreAdjustDialog');
+    if (!dlg) return;
+    dlg.dataset.student = studentName;
+    dlg.dataset.sign = String(sign);
+    $('scoreAdjustLabel').textContent = `${studentName} · ${sign > 0 ? '加分' : '减分'}`;
+    $('scoreAdjustDelta').value = '1';
+    $('scoreAdjustReason').value = '';
+    // 渲染原因预设
+    const presetBox = $('scoreAdjustPresets');
+    if (presetBox) {
+        presetBox.innerHTML = SCORE_REASON_PRESETS.map(p => `<button type="button" class="score-preset-btn" data-text="${escapeAttr(p)}">${escapeHtml(p)}</button>`).join('');
+    }
+    dlg.classList.remove('hidden');
+    setTimeout(() => $('scoreAdjustDelta').focus(), 50);
+}
+
+function closeScoreAdjustDialog() { const d = $('scoreAdjustDialog'); if (d) d.classList.add('hidden'); }
+
+function confirmScoreAdjust() {
+    const dlg = $('scoreAdjustDialog');
+    if (!dlg) return;
+    const studentName = dlg.dataset.student;
+    const sign = parseInt(dlg.dataset.sign, 10) || 1;
+    const amount = Math.max(1, Math.min(99, parseInt($('scoreAdjustDelta').value, 10) || 1));
+    const reason = $('scoreAdjustReason').value.trim() || (sign > 0 ? '手动加分' : '手动减分');
+    const delta = sign * amount;
+    const date = ymd(new Date());
+    if (!addScoreEntry(date, studentName, 'manual', delta, reason)) {
+        showToast('该记录已存在', 'info');
+    }
+    closeScoreAdjustDialog();
+    renderScorePage();
+    saveStateDebounced();
+}
+
+function exportScoreExcel() {
+    if (state.students.length === 0) { showToast('暂无积分数据', 'warning'); return; }
+    const agg = aggregateByStudent();
+    const rows = state.students.map(s => {
+        const a = agg[s.name] || { total: 0, plus: 0, minus: 0, recent: [] };
+        return [s.name + (s.gender ? '(' + s.gender + ')' : ''), a.plus, a.minus, a.total];
+    }).sort((a, b) => b[3] - a[3]);
+    const data = [
+        ['积分统计（' + ymd(new Date()) + '）'],
+        ['学生', '加分', '减分', '净分'],
+        ...rows,
+        [],
+        ['明细日志'],
+        ['日期', '学生', '来源', '分值', '原因'],
+        ...state.score.log.slice().sort((a, b) => a.date.localeCompare(b.date)).map(e => [e.date, e.studentName, sourceLabel(e.source), e.delta, e.reason])
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 18 }, { wch: 10 }, { wch: 10 }, { wch: 10 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '积分');
+    XLSX.writeFile(wb, `积分统计_${ymd(new Date())}.xlsx`);
+    showToast('Excel 导出成功', 'success');
+}
+
+function sourceLabel(s) {
+    return { attendance: '考勤', duty: '值班', rollcall: '点名', manual: '手动' }[s] || s;
+}
+function printScore() { window.print(); }
 
 // ===== 值班表生成 =====
 /**
@@ -1662,6 +1978,31 @@ document.addEventListener('click', (e) => {
     if (dlg && !dlg.classList.contains('hidden') && !dlg.contains(e.target) && !e.target.closest('.att-cell')) closeAttendanceNoteDialog();
 });
 
+// 积分按钮绑定
+if ($('scoreViewRanking')) $('scoreViewRanking').addEventListener('click', () => { state.score.view = 'ranking'; renderScorePage(); saveStateDebounced(); });
+if ($('scoreViewDetail')) $('scoreViewDetail').addEventListener('click', () => { state.score.view = 'detail'; renderScorePage(); saveStateDebounced(); });
+if ($('btnScoreReconcile')) $('btnScoreReconcile').addEventListener('click', () => {
+    const added = reconcileScoreLog();
+    renderScorePage();
+    saveStateDebounced();
+    showToast(added > 0 ? `已补齐 ${added} 条联动积分` : '已是最新', added > 0 ? 'success' : 'info');
+});
+if ($('btnScoreExport')) $('btnScoreExport').addEventListener('click', exportScoreExcel);
+if ($('btnScorePrint')) $('btnScorePrint').addEventListener('click', printScore);
+if ($('scoreAdjustOk')) $('scoreAdjustOk').addEventListener('click', confirmScoreAdjust);
+if ($('scoreAdjustCancel')) $('scoreAdjustCancel').addEventListener('click', closeScoreAdjustDialog);
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.score-preset-btn');
+    if (btn) {
+        const reason = $('scoreAdjustReason');
+        if (reason) reason.value = btn.dataset.text;
+    }
+});
+document.addEventListener('click', (e) => {
+    const dlg = $('scoreAdjustDialog');
+    if (dlg && !dlg.classList.contains('hidden') && !dlg.contains(e.target) && !e.target.closest('.btn-mini')) closeScoreAdjustDialog();
+});
+
 // ===== 初始化 =====
 (function init() {
     const cached = loadState();
@@ -1689,6 +2030,10 @@ document.addEventListener('click', (e) => {
             state.attendance.anchorDate = typeof cached.attendance.anchorDate === 'string' ? cached.attendance.anchorDate : null;
             state.attendance.records = (cached.attendance.records && typeof cached.attendance.records === 'object') ? cached.attendance.records : {};
             state.attendance.initializedAt = cached.attendance.initializedAt || null;
+        }
+        if (cached.score && typeof cached.score === 'object') {
+            state.score.view = cached.score.view === 'detail' ? 'detail' : 'ranking';
+            state.score.log = Array.isArray(cached.score.log) ? cached.score.log : [];
         }
     }
 
@@ -1743,4 +2088,6 @@ document.addEventListener('click', (e) => {
     if (state.seating) renderSeating();
     // 考勤页面：先把锚点对齐到今天/本月，渲染一次备用
     if (typeof renderAttendancePage === 'function') renderAttendancePage();
+    // 积分页面：触发一次 reconcile（不会重复加分，仅补缺失）
+    if (typeof renderScorePage === 'function') renderScorePage();
 })();

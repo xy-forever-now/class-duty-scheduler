@@ -1292,6 +1292,90 @@ body {
     .attendance-stats { grid-template-columns: 1fr; }
 }
 
+/* ===== 积分统计页面 ===== */
+.score-table { font-size: 13px; }
+.score-table .score-rank { width: 56px; font-weight: 700; color: #6b7280; }
+.score-table .score-name { min-width: 130px; }
+.score-table .score-total { font-size: 18px; font-weight: 700; min-width: 60px; }
+.score-table .score-total.plus { color: #059669; }
+.score-table .score-total.minus { color: #dc2626; }
+.score-table .score-total.zero { color: #9ca3af; }
+.score-table .score-plus { color: #059669; font-weight: 600; }
+.score-table .score-minus { color: #dc2626; font-weight: 600; }
+.score-table .score-trend-cell { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; min-width: 120px; }
+.score-trend {
+    display: inline-block;
+    min-width: 24px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+}
+.score-trend.plus { background: #d1fae5; color: #065f46; }
+.score-trend.minus { background: #fee2e2; color: #991b1b; }
+.score-trend.zero { background: #f3f4f6; color: #9ca3af; }
+.score-row { cursor: pointer; }
+.score-row:hover { background: #f9fafb; }
+.score-rest-mark {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    background: #fef3c7;
+    color: #92400e;
+    border-radius: 8px;
+    font-size: 10px;
+}
+.score-actions-cell { white-space: nowrap; }
+.btn-mini {
+    padding: 3px 10px;
+    font-size: 13px;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    margin: 0 2px;
+}
+.btn-mini-plus { background: #10b981; }
+.btn-mini-minus { background: #ef4444; }
+
+.score-adjust-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+.score-adjust-row label {
+    font-size: 13px;
+    color: #6b7280;
+    min-width: 36px;
+}
+.score-adjust-row input[type="number"] {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    text-align: center;
+}
+.score-presets {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+.score-preset-btn {
+    padding: 5px 10px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    color: #374151;
+    transition: all 0.15s;
+}
+.score-preset-btn:hover { background: #e5e7eb; border-color: #d1d5db; }
+
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
     .nav-menu:not(.collapsed) {

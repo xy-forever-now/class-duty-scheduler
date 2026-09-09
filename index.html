@@ -37,10 +37,9 @@
                     <span class="nav-icon">✅</span>
                     <span class="nav-text">考勤记录</span>
                 </li>
-                <li class="nav-item disabled" data-page="score">
+                <li class="nav-item" data-page="score">
                     <span class="nav-icon">📊</span>
                     <span class="nav-text">积分统计</span>
-                    <span class="nav-badge">即将上线</span>
                 </li>
                 <li class="nav-item disabled" data-page="notice">
                     <span class="nav-icon">📢</span>
@@ -366,6 +365,72 @@
                         <div class="attendance-note-actions">
                             <button class="btn btn-secondary" id="attendanceNoteCancel">取消</button>
                             <button class="btn btn-primary" id="attendanceNoteOk">保存</button>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- =============== 积分统计页面 =============== -->
+                <section class="page hidden" data-page="score">
+                    <div class="content-header-bar">
+                        <h2>📊 积分统计</h2>
+                        <div>
+                            <button class="btn btn-secondary" id="btnScoreReconcile">🔄 同步联动</button>
+                            <button class="btn btn-warning" id="btnScoreExport">📤 导出Excel</button>
+                            <button class="btn btn-info" id="btnScorePrint">🖨️ 打印</button>
+                        </div>
+                    </div>
+
+                    <div class="config-bar">
+                        <div class="config-item">
+                            <label>视图</label>
+                            <div class="attendance-view-tabs">
+                                <button id="scoreViewRanking" class="att-view-tab active">🏆 排行榜</button>
+                                <button id="scoreViewDetail" class="att-view-tab">📅 30天明细</button>
+                            </div>
+                        </div>
+                        <div class="config-item config-item-tip">
+                            <span class="config-slot-text">规则</span>
+                            <span class="config-tip-inline">出勤+1 / 迟到-1 / 补到+2 / 请假±0 · 值日+2 · 点名+1 · 手动可加减</span>
+                        </div>
+                    </div>
+
+                    <div class="attendance-stats">
+                        <div class="stat-card stat-rolled">
+                            <div class="stat-card-num" id="scoreGrandTotal">0</div>
+                            <div class="stat-card-label">全班总分</div>
+                        </div>
+                        <div class="stat-card stat-male">
+                            <div class="stat-card-num" id="scoreTotalPlus">+0</div>
+                            <div class="stat-card-label">总加分</div>
+                        </div>
+                        <div class="stat-card stat-resting">
+                            <div class="stat-card-num" id="scoreTotalMinus">0</div>
+                            <div class="stat-card-label">总减分</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-card-num" id="scoreTopStudent">—</div>
+                            <div class="stat-card-label">最高分</div>
+                        </div>
+                    </div>
+
+                    <div id="scoreTableContainer" class="attendance-table-container">
+                        <div class="empty-state">
+                            <div class="empty-icon">📊</div>
+                            <p>请先在「学生管理」导入学生数据</p>
+                        </div>
+                    </div>
+
+                    <div id="scoreAdjustDialog" class="attendance-note-dialog hidden">
+                        <div class="attendance-note-title" id="scoreAdjustLabel">—</div>
+                        <div class="score-adjust-row">
+                            <label>分值</label>
+                            <input type="number" id="scoreAdjustDelta" min="1" max="99" value="1">
+                        </div>
+                        <input type="text" id="scoreAdjustReason" maxlength="80" placeholder="可填写原因，或点下方预设">
+                        <div class="score-presets" id="scoreAdjustPresets"></div>
+                        <div class="attendance-note-actions">
+                            <button class="btn btn-secondary" id="scoreAdjustCancel">取消</button>
+                            <button class="btn btn-primary" id="scoreAdjustOk">保存</button>
                         </div>
                     </div>
                 </section>
