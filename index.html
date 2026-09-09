@@ -374,6 +374,7 @@
                     <div class="content-header-bar">
                         <h2>📊 积分统计</h2>
                         <div>
+                            <button class="btn btn-secondary" id="btnScoreRules">⚙️ 规则</button>
                             <button class="btn btn-secondary" id="btnScoreReconcile">🔄 同步联动</button>
                             <button class="btn btn-warning" id="btnScoreExport">📤 导出Excel</button>
                             <button class="btn btn-info" id="btnScorePrint">🖨️ 打印</button>
@@ -390,7 +391,7 @@
                         </div>
                         <div class="config-item config-item-tip">
                             <span class="config-slot-text">规则</span>
-                            <span class="config-tip-inline">出勤+1 / 迟到-1 / 补到+2 / 请假±0 · 值日+2 · 点名+1 · 手动可加减</span>
+                            <span class="config-tip-inline" id="scoreRulesTip">出勤+1 / 迟到-1 / 补到+2 / 请假±0 · 值日+2 · 点名+1 · 点击「⚙️ 规则」可改</span>
                         </div>
                     </div>
 
@@ -431,6 +432,48 @@
                         <div class="attendance-note-actions">
                             <button class="btn btn-secondary" id="scoreAdjustCancel">取消</button>
                             <button class="btn btn-primary" id="scoreAdjustOk">保存</button>
+                        </div>
+                    </div>
+
+                    <div id="scoreRulesDialog" class="attendance-note-dialog hidden">
+                        <div class="attendance-note-title">⚙️ 积分规则</div>
+                        <div class="score-rules-note">修改后保存会自动清空旧的联动分（考勤/值班/点名）并按新规则重新计算；手动加减分不受影响。</div>
+                        <div class="score-rules-grid">
+                            <div class="score-rules-section">
+                                <div class="score-rules-title">📅 考勤联动（按状态加分，可正可负）</div>
+                                <div class="score-rules-row">
+                                    <label>出勤</label>
+                                    <input type="number" id="ruleAttPresent" step="1">
+                                </div>
+                                <div class="score-rules-row">
+                                    <label>迟到</label>
+                                    <input type="number" id="ruleAttLate" step="1">
+                                </div>
+                                <div class="score-rules-row">
+                                    <label>补到</label>
+                                    <input type="number" id="ruleAttMakeup" step="1">
+                                </div>
+                                <div class="score-rules-row">
+                                    <label>请假</label>
+                                    <input type="number" id="ruleAttLeave" step="1">
+                                </div>
+                            </div>
+                            <div class="score-rules-section">
+                                <div class="score-rules-title">🗓️ 值班 / 🎯 点名联动</div>
+                                <div class="score-rules-row">
+                                    <label>值班一次</label>
+                                    <input type="number" id="ruleDuty" step="1">
+                                </div>
+                                <div class="score-rules-row">
+                                    <label>被点到一次</label>
+                                    <input type="number" id="ruleRoll" step="1">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="attendance-note-actions">
+                            <button class="btn btn-secondary" id="scoreRulesCancel">取消</button>
+                            <button class="btn btn-secondary" id="scoreRulesReset">恢复默认</button>
+                            <button class="btn btn-primary" id="scoreRulesSave">保存并重算</button>
                         </div>
                     </div>
                 </section>

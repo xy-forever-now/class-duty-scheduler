@@ -34,6 +34,11 @@ const state = {
     score: {                                                          // 积分统计
         view: 'ranking',      // 'ranking' | 'detail'
         log: [],              // { id, ts, date, studentName, source, delta, reason }
+        rules: {              // 积分规则（用户可编辑）
+            attendance: { present: +1, late: -1, makeup: +2, leave: 0 },
+            duty:       +2,
+            rollcall:   +1,
+        },
     },
 };
 
@@ -807,11 +812,26 @@ function exportAttendanceExcel() {
 function printAttendance() { window.print(); }
 
 // ===== 积分统计 =====
-const SCORE_RULES = {
+// 规则从 state.score.rules 读取（持久化、可编辑）；找不到时回退到默认值
+const SCORE_RULES_DEFAULT = {
     attendance: { present: +1, late: -1, makeup: +2, leave: 0 },   // leave 不计分
     duty:       +2,                                                // 完成一次值日
     rollcall:   +1,                                                // 被点到（出勤）
 };
+function getScoreRules() {
+    const r = state.score && state.score.rules;
+    if (!r || typeof r !== 'object') return JSON.parse(JSON.stringify(SCORE_RULES_DEFAULT));
+    return {
+        attendance: {
+            present: Number(r.attendance && r.attendance.present) || 0,
+            late:    Number(r.attendance && r.attendance.late)    || 0,
+            makeup:  Number(r.attendance && r.attendance.makeup)  || 0,
+            leave:   Number(r.attendance && r.attendance.leave)   || 0,
+        },
+        duty:     Number(r.duty)     || 0,
+        rollcall: Number(r.rollcall) || 0,
+    };
+}
 
 const SCORE_REASON_PRESETS = ['+表扬', '+作业优秀', '+积极发言', '-纪律', '-作业未交', '-迟到'];
 
@@ -842,14 +862,15 @@ function removeScoreEntriesByKey(date, studentName, source, reason) {
 // 从考勤 records 补齐所有联动分；幂等：已存在的不会重复添加
 function reconcileAttendanceScores() {
     if (!state.attendance.records) return 0;
+    const rules = getScoreRules().attendance;
     let added = 0;
     for (const date in state.attendance.records) {
         const dayMap = state.attendance.records[date];
         for (const name in dayMap) {
             const cell = dayMap[name];
             const status = cell && cell.status;
-            if (!status || !(status in SCORE_RULES.attendance)) continue;
-            const delta = SCORE_RULES.attendance[status];
+            if (!status || !(status in rules)) continue;
+            const delta = rules[status];
             if (delta === 0) continue;
             const reason = `考勤·${ATTENDANCE_LABELS[status].replace(/^[^ ]+ /, '')}`;
             if (addScoreEntry(date, name, 'attendance', delta, reason)) added++;
@@ -861,6 +882,7 @@ function reconcileAttendanceScores() {
 // 从值班表 schedule 补齐
 function reconcileDutyScores() {
     if (!state.schedule || !state.schedule.schedule) return 0;
+    const ruleDuty = getScoreRules().duty;
     let added = 0;
     for (const weekKey in state.schedule.schedule) {
         state.schedule.schedule[weekKey].forEach(dayData => {
@@ -868,7 +890,7 @@ function reconcileDutyScores() {
             dayData.assignments.forEach(a => {
                 a.students.forEach(stu => {
                     const reason = `值班·${a.duty}`;
-                    if (addScoreEntry(date, stu.name, 'duty', SCORE_RULES.duty, reason)) added++;
+                    if (addScoreEntry(date, stu.name, 'duty', ruleDuty, reason)) added++;
                 });
             });
         });
@@ -879,11 +901,12 @@ function reconcileDutyScores() {
 // 从点名 history 补齐
 function reconcileRollcallScores() {
     if (!state.rollcall || !Array.isArray(state.rollcall.history)) return 0;
+    const ruleRoll = getScoreRules().rollcall;
     let added = 0;
     // 用日期粒度：用今天作为 rollcall 项目的聚合日期（rollcall 没有按日期拆分历史）
     const date = ymd(new Date());
     state.rollcall.history.forEach(name => {
-        if (addScoreEntry(date, name, 'rollcall', SCORE_RULES.rollcall, '点名出勤')) added++;
+        if (addScoreEntry(date, name, 'rollcall', ruleRoll, '点名出勤')) added++;
     });
     return added;
 }
@@ -1042,6 +1065,7 @@ function renderScoreControls() {
 function renderScorePage() {
     reconcileScoreLog();
     renderScoreControls();
+    renderScoreRulesTip();
     updateScoreStats(aggregateByStudent());
     if (state.score.view === 'detail') renderScoreDetail();
     else renderScoreRanking();
@@ -1111,6 +1135,86 @@ function sourceLabel(s) {
     return { attendance: '考勤', duty: '值班', rollcall: '点名', manual: '手动' }[s] || s;
 }
 function printScore() { window.print(); }
+
+// ===== 积分规则编辑 =====
+// 用当前规则生成顶部那行简短提示
+function renderScoreRulesTip() {
+    const el = $('scoreRulesTip');
+    if (!el) return;
+    const r = getScoreRules();
+    const a = r.attendance;
+    const fmt = v => (v > 0 ? `+${v}` : `${v}`);
+    el.textContent = `出勤${fmt(a.present)} / 迟到${fmt(a.late)} / 补到${fmt(a.makeup)} / 请假${fmt(a.leave)} · 值日${fmt(r.duty)} · 点名${fmt(r.rollcall)} · 点「⚙️ 规则」可改`;
+}
+
+// 把当前规则写回 state.score.rules（保证结构完整）
+function writeScoreRules(rules) {
+    state.score.rules = {
+        attendance: {
+            present: Number(rules.attendance.present) || 0,
+            late:    Number(rules.attendance.late)    || 0,
+            makeup:  Number(rules.attendance.makeup)  || 0,
+            leave:   Number(rules.attendance.leave)   || 0,
+        },
+        duty:     Number(rules.duty)     || 0,
+        rollcall: Number(rules.rollcall) || 0,
+    };
+}
+
+function openScoreRulesDialog() {
+    const dlg = $('scoreRulesDialog');
+    if (!dlg) return;
+    const r = getScoreRules();
+    $('ruleAttPresent').value = r.attendance.present;
+    $('ruleAttLate').value    = r.attendance.late;
+    $('ruleAttMakeup').value  = r.attendance.makeup;
+    $('ruleAttLeave').value   = r.attendance.leave;
+    $('ruleDuty').value       = r.duty;
+    $('ruleRoll').value       = r.rollcall;
+    dlg.classList.remove('hidden');
+}
+
+function closeScoreRulesDialog() {
+    const dlg = $('scoreRulesDialog');
+    if (dlg) dlg.classList.add('hidden');
+}
+
+function resetScoreRulesDialog() {
+    const r = SCORE_RULES_DEFAULT;
+    $('ruleAttPresent').value = r.attendance.present;
+    $('ruleAttLate').value    = r.attendance.late;
+    $('ruleAttMakeup').value  = r.attendance.makeup;
+    $('ruleAttLeave').value   = r.attendance.leave;
+    $('ruleDuty').value       = r.duty;
+    $('ruleRoll').value       = r.rollcall;
+}
+
+// 保存规则：先清掉所有联动分（attendance/duty/rollcall），按新规则重新生成
+function saveScoreRules() {
+    const newRules = {
+        attendance: {
+            present: Number($('ruleAttPresent').value),
+            late:    Number($('ruleAttLate').value),
+            makeup:  Number($('ruleAttMakeup').value),
+            leave:   Number($('ruleAttLeave').value),
+        },
+        duty:     Number($('ruleDuty').value),
+        rollcall: Number($('ruleRoll').value),
+    };
+    // 1) 写规则
+    writeScoreRules(newRules);
+    // 2) 清掉所有联动源记录（手动 source=manual 保留）
+    const before = state.score.log.length;
+    state.score.log = state.score.log.filter(e => e.source === 'manual');
+    const removed = before - state.score.log.length;
+    // 3) 按新规则重新生成联动分
+    const added = reconcileScoreLog();
+    closeScoreRulesDialog();
+    renderScoreRulesTip();
+    renderScorePage();
+    saveState();
+    showToast(`规则已更新：清掉 ${removed} 条旧联动，加回 ${added} 条（手动分 ${state.score.log.filter(e => e.source === 'manual').length} 条保留）`, 'success');
+}
 
 // ===== 值班表生成 =====
 /**
@@ -1989,6 +2093,10 @@ if ($('btnScoreReconcile')) $('btnScoreReconcile').addEventListener('click', () 
 });
 if ($('btnScoreExport')) $('btnScoreExport').addEventListener('click', exportScoreExcel);
 if ($('btnScorePrint')) $('btnScorePrint').addEventListener('click', printScore);
+if ($('btnScoreRules')) $('btnScoreRules').addEventListener('click', openScoreRulesDialog);
+if ($('scoreRulesSave')) $('scoreRulesSave').addEventListener('click', saveScoreRules);
+if ($('scoreRulesCancel')) $('scoreRulesCancel').addEventListener('click', closeScoreRulesDialog);
+if ($('scoreRulesReset')) $('scoreRulesReset').addEventListener('click', resetScoreRulesDialog);
 if ($('scoreAdjustOk')) $('scoreAdjustOk').addEventListener('click', confirmScoreAdjust);
 if ($('scoreAdjustCancel')) $('scoreAdjustCancel').addEventListener('click', closeScoreAdjustDialog);
 document.addEventListener('click', (e) => {
@@ -2001,6 +2109,8 @@ document.addEventListener('click', (e) => {
 document.addEventListener('click', (e) => {
     const dlg = $('scoreAdjustDialog');
     if (dlg && !dlg.classList.contains('hidden') && !dlg.contains(e.target) && !e.target.closest('.btn-mini')) closeScoreAdjustDialog();
+    const rdlg = $('scoreRulesDialog');
+    if (rdlg && !rdlg.classList.contains('hidden') && !rdlg.contains(e.target) && e.target !== $('btnScoreRules') && !e.target.closest('#btnScoreRules')) closeScoreRulesDialog();
 });
 
 // ===== 初始化 =====
@@ -2034,6 +2144,18 @@ document.addEventListener('click', (e) => {
         if (cached.score && typeof cached.score === 'object') {
             state.score.view = cached.score.view === 'detail' ? 'detail' : 'ranking';
             state.score.log = Array.isArray(cached.score.log) ? cached.score.log : [];
+            if (cached.score.rules && typeof cached.score.rules === 'object') {
+                state.score.rules = {
+                    attendance: {
+                        present: Number(cached.score.rules.attendance && cached.score.rules.attendance.present) || 0,
+                        late:    Number(cached.score.rules.attendance && cached.score.rules.attendance.late)    || 0,
+                        makeup:  Number(cached.score.rules.attendance && cached.score.rules.attendance.makeup)  || 0,
+                        leave:   Number(cached.score.rules.attendance && cached.score.rules.attendance.leave)   || 0,
+                    },
+                    duty:     Number(cached.score.rules.duty)     || 0,
+                    rollcall: Number(cached.score.rules.rollcall) || 0,
+                };
+            }
         }
     }
 
