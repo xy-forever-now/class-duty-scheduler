@@ -33,10 +33,9 @@
                     <span class="nav-text">随机点名</span>
                 </li>
                 <li class="nav-divider"></li>
-                <li class="nav-item disabled" data-page="attendance">
+                <li class="nav-item" data-page="attendance">
                     <span class="nav-icon">✅</span>
                     <span class="nav-text">考勤记录</span>
-                    <span class="nav-badge">即将上线</span>
                 </li>
                 <li class="nav-item disabled" data-page="score">
                     <span class="nav-icon">📊</span>
@@ -294,6 +293,79 @@
                         <div class="empty-state">
                             <div class="empty-icon">🪑</div>
                             <p>请先导入学生数据，设置排数和列数后点击"随机排座"</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- =============== 考勤记录页面 =============== -->
+                <section class="page hidden" data-page="attendance">
+                    <div class="content-header-bar">
+                        <h2>✅ 考勤记录</h2>
+                        <div>
+                            <button class="btn btn-primary" id="btnAttendanceInit">📋 初始化</button>
+                            <button class="btn btn-warning" id="btnAttendanceExport">📤 导出Excel</button>
+                            <button class="btn btn-info" id="btnAttendancePrint">🖨️ 打印</button>
+                        </div>
+                    </div>
+
+                    <div class="config-bar">
+                        <div class="config-item">
+                            <label>视图</label>
+                            <div class="attendance-view-tabs">
+                                <button id="attendanceViewWeek" class="att-view-tab active">📅 周</button>
+                                <button id="attendanceViewMonth" class="att-view-tab">🗓️ 月</button>
+                            </div>
+                        </div>
+                        <div class="config-item">
+                            <label for="attendanceAnchorDate">锚点日期</label>
+                            <input type="date" id="attendanceAnchorDate">
+                        </div>
+                        <div class="config-item">
+                            <label>翻页</label>
+                            <div class="attendance-pager">
+                                <button class="btn btn-secondary" id="btnAttendancePrev">← 上一期</button>
+                                <button class="btn btn-secondary" id="btnAttendanceToday">今天</button>
+                                <button class="btn btn-secondary" id="btnAttendanceNext">下一期 →</button>
+                            </div>
+                        </div>
+                        <div class="config-item config-item-tip">
+                            <span class="config-slot-text" id="attendanceAnchorLabel">—</span>
+                            <span class="config-tip-inline">💡 单击单元格循环切状态；请假/补到会要求填写事由</span>
+                        </div>
+                    </div>
+
+                    <div class="attendance-stats">
+                        <div class="stat-card">
+                            <div class="stat-card-num" id="attTotalActive">0</div>
+                            <div class="stat-card-label">参与人数（已扣轮空）</div>
+                        </div>
+                        <div class="stat-card stat-rolled">
+                            <div class="stat-card-num" id="attTodayPresent">0 / 0</div>
+                            <div class="stat-card-label">今日出勤</div>
+                        </div>
+                        <div class="stat-card stat-resting">
+                            <div class="stat-card-num" id="attPeriodLeave">0</div>
+                            <div class="stat-card-label">本期请假</div>
+                        </div>
+                        <div class="stat-card stat-male">
+                            <div class="stat-card-num" id="attOverallRate">-</div>
+                            <div class="stat-card-label">本期出勤率</div>
+                        </div>
+                    </div>
+
+                    <div id="attendanceTableContainer" class="attendance-table-container">
+                        <div class="empty-state">
+                            <div class="empty-icon">📋</div>
+                            <p>请先在「学生管理」导入学生数据</p>
+                        </div>
+                    </div>
+
+                    <div id="attendanceNoteDialog" class="attendance-note-dialog hidden">
+                        <div class="attendance-note-title" id="attendanceNoteLabel">—</div>
+                        <input type="text" id="attendanceNoteInput" maxlength="80" placeholder="请填写事由">
+                        <div class="attendance-note-actions">
+                            <button class="btn btn-secondary" id="attendanceNoteCancel">取消</button>
+                            <button class="btn btn-primary" id="attendanceNoteOk">保存</button>
                         </div>
                     </div>
                 </section>

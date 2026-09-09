@@ -1100,6 +1100,196 @@ body {
         print-color-adjust: exact;
     }
     .seat-overflow-box { display: none; }
+
+    /* 考勤页：打印时隐藏控件与对话框 */
+    .config-bar, .attendance-stats, .attendance-note-dialog { display: none !important; }
+    .attendance-table-container { box-shadow: none !important; padding: 0 !important; }
+    .attendance-table .cell-present,
+    .attendance-table .cell-late,
+    .attendance-table .cell-leave,
+    .attendance-table .cell-makeup {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
+/* ===== 考勤记录页面 ===== */
+.attendance-view-tabs {
+    display: inline-flex;
+    background: #f3f4f6;
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+}
+.att-view-tab {
+    padding: 6px 14px;
+    border: none;
+    background: transparent;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #6b7280;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-weight: 500;
+}
+.att-view-tab:hover { color: #374151; }
+.att-view-tab.active {
+    background: white;
+    color: #4f46e5;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+
+.attendance-pager { display: inline-flex; gap: 6px; }
+.btn.btn-secondary {
+    background: #6b7280;
+    padding: 8px 12px;
+    font-size: 12px;
+}
+.btn.btn-secondary:hover:not(:disabled) { background: #4b5563; }
+
+.attendance-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.attendance-table-container {
+    background: white;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.attendance-table-scroll { overflow-x: auto; }
+
+.attendance-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    background: white;
+}
+.attendance-table th,
+.attendance-table td {
+    border: 1px solid #e5e7eb;
+    padding: 6px 8px;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+.attendance-table thead th {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    color: white;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 8px 6px;
+}
+.attendance-table .att-th-student,
+.attendance-table .att-td-student {
+    position: sticky;
+    left: 0;
+    background: white;
+    z-index: 2;
+    text-align: left;
+    min-width: 110px;
+    border-right: 2px solid #d1d5db;
+}
+.attendance-table thead .att-th-student { background: #4f46e5; z-index: 3; }
+.attendance-table .att-th-date.weekend { background: linear-gradient(135deg, #ec4899 0%, #f43f5e 100%); }
+.attendance-table .att-th-date.today { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+.attendance-table .att-th-dow { font-size: 10px; font-weight: 400; opacity: 0.85; }
+.attendance-table .att-th-stat { background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); min-width: 56px; }
+
+.attendance-table .att-td-student { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.attendance-table .att-student-name { font-weight: 500; color: #1f2937; }
+.attendance-table .att-student-gender {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: normal;
+}
+.attendance-table .att-student-gender.male { background: #dbeafe; color: #1e40af; }
+.attendance-table .att-student-gender.female { background: #fce7f3; color: #be185d; }
+
+.attendance-table tr.att-row-resting .att-td-student { opacity: 0.55; }
+.attendance-table tr.att-row-resting .att-student-name { text-decoration: line-through; }
+
+.attendance-table .att-cell {
+    cursor: pointer;
+    transition: filter 0.12s, transform 0.12s;
+    position: relative;
+    min-width: 72px;
+}
+.attendance-table .att-cell:hover { filter: brightness(0.94); transform: scale(1.02); }
+.attendance-table .att-cell-label { font-weight: 500; font-size: 12px; }
+.attendance-table .att-note-mark {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    font-size: 9px;
+    opacity: 0.7;
+}
+
+.attendance-table .cell-empty { background: #f9fafb; color: #9ca3af; }
+.attendance-table .cell-present { background: #d1fae5; color: #065f46; }
+.attendance-table .cell-late { background: #fed7aa; color: #9a3412; }
+.attendance-table .cell-makeup { background: #dbeafe; color: #1e40af; }
+.attendance-table .cell-leave { background: #e9d5ff; color: #6b21a8; }
+
+.attendance-table .att-td-stat { background: #f9fafb; font-weight: 600; color: #4b5563; font-size: 13px; }
+.attendance-table .att-stat-present { color: #059669; }
+.attendance-table .att-stat-late { color: #ea580c; }
+.attendance-table .att-stat-leave { color: #7c3aed; }
+.attendance-table .att-stat-makeup { color: #2563eb; }
+.attendance-table .att-stat-rate { color: #4f46e5; font-size: 14px; }
+
+.attendance-note-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.25);
+    z-index: 2000;
+    width: 360px;
+    max-width: 92vw;
+}
+.attendance-note-dialog.hidden { display: none; }
+.attendance-note-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2937;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed #e5e7eb;
+}
+.attendance-note-dialog input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 14px;
+    box-sizing: border-box;
+}
+.attendance-note-dialog input[type="text"]:focus {
+    outline: none;
+    border-color: #4f46e5;
+    box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.12);
+}
+.attendance-note-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+@media (max-width: 768px) {
+    .attendance-stats { grid-template-columns: 1fr 1fr; }
+    .config-bar { gap: 12px; }
+}
+@media (max-width: 480px) {
+    .attendance-stats { grid-template-columns: 1fr; }
 }
 
 /* ===== 响应式 ===== */

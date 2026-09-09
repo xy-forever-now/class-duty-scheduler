@@ -25,6 +25,12 @@ const state = {
     },
     dutyCounts: { '扫地': 2, '擦黑板': 1, '倒垃圾': 1, '摆桌椅': 1 }, // 各职务人数
     seatingConfig: { rows: 6, cols: 6, mode: 'random' },               // 座位表默认配置
+    attendance: {                                                     // 考勤记录
+        view: 'week',          // 'week' | 'month'
+        anchorDate: null,     // 当前查看锚点（YYYY-MM-DD）
+        records: {},          // { 'YYYY-MM-DD': { studentName: { status, note } } }
+        initializedAt: null,
+    },
 };
 
 // ===== 工具函数 =====
@@ -56,6 +62,7 @@ function saveState() {
             },
             dutyCounts: state.dutyCounts,
             seatingConfig: state.seatingConfig,
+            attendance: state.attendance,
             savedAt: Date.now(),
         };
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
@@ -99,7 +106,7 @@ const pageTitles = {
     seating: { title: '🪑 座位表', sub: '按排列数随机排座' },
     students: { title: '👥 学生管理', sub: '查看与管理班级学生' },
     rollcall: { title: '🎯 随机点名', sub: '从非轮空学生中随机抽取' },
-    attendance: { title: '✅ 考勤记录', sub: '即将上线' },
+    attendance: { title: '✅ 考勤记录', sub: '每日打卡 · 周/月统计' },
     score: { title: '📊 积分统计', sub: '即将上线' },
     notice: { title: '📢 班级通知', sub: '即将上线' },
     settings: { title: '🔧 系统设置', sub: '即将上线' },
@@ -142,6 +149,7 @@ function switchPage(pageName) {
         // 刷新值班表（轮空列表）
         if (state.schedule) renderDutyTable();
     }
+    if (pageName === 'attendance') renderAttendancePage();
 
     state.currentPage = pageName;
 }
@@ -409,13 +417,14 @@ $('btnClearStudents').addEventListener('click', () => {
         showToast('当前没有学生数据', 'info');
         return;
     }
-    if (confirm(`确认清空全部 ${state.students.length} 名学生？\n\n将同时清空：\n· 值班表\n· 座位表\n· 随机点名记录\n· 本地所有缓存\n\n此操作不可撤销。`)) {
+    if (confirm(`确认清空全部 ${state.students.length} 名学生？\n\n将同时清空：\n· 值班表\n· 座位表\n· 随机点名记录\n· 考勤记录\n· 本地所有缓存\n\n此操作不可撤销。`)) {
         // 1) 重置所有运行时结果数据（配置项保留：起始日期/周期/策略/职务数/座位行列/点名选项）
         state.students = [];
         state.schedule = null;
         state.seating = null;
         state.rollcall.history = [];
         state.rollcall.lastResult = null;
+        state.attendance = { view: 'week', anchorDate: null, records: {}, initializedAt: null };
 
         // 2) 清空 localStorage 中本应用的所有键（含历史版本残留）
         try {
@@ -443,11 +452,349 @@ $('btnClearStudents').addEventListener('click', () => {
         if (state.currentPage === 'rollcall' && typeof renderRollcallPage === 'function') {
             renderRollcallPage();
         }
+        if (state.currentPage === 'attendance' && typeof renderAttendancePage === 'function') {
+            renderAttendancePage();
+        }
         setStatus('已重置全部本地记录');
 
         showToast('已清空全部本地记录，恢复到最初状态', 'success');
     }
 });
+
+// ===== 考勤记录 =====
+const ATTENDANCE_STATUS = ['present', 'late', 'leave', 'makeup']; // null → present → late → leave → makeup → null
+const ATTENDANCE_LABELS = {
+    present: '✓ 出勤',
+    late: '⏰ 迟到',
+    leave: '📨 请假',
+    makeup: '🔁 补到',
+};
+const DAY_NAMES = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function ymd(d) { return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`; }
+function parseYmd(s) {
+    if (!s || typeof s !== 'string') return null;
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return null;
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function getWeekDates(anchorYmd) {
+    const d = parseYmd(anchorYmd) || new Date();
+    // 把日期对齐到本周一
+    const dow = d.getDay(); // 0=Sun
+    const offsetToMon = (dow + 6) % 7;
+    d.setDate(d.getDate() - offsetToMon);
+    const arr = [];
+    for (let i = 0; i < 5; i++) {
+        const x = new Date(d);
+        x.setDate(d.getDate() + i);
+        arr.push(ymd(x));
+    }
+    return arr;
+}
+
+function getMonthDates(anchorYmd) {
+    const d = parseYmd(anchorYmd) || new Date();
+    const y = d.getFullYear();
+    const m = d.getMonth();
+    const last = new Date(y, m + 1, 0).getDate();
+    const arr = [];
+    for (let i = 1; i <= last; i++) arr.push(`${y}-${pad2(m + 1)}-${pad2(i)}`);
+    return arr;
+}
+
+function formatAnchorLabel(anchorYmd, view) {
+    const d = parseYmd(anchorYmd) || new Date();
+    if (view === 'month') return `${d.getFullYear()} 年 ${d.getMonth() + 1} 月`;
+    const dates = getWeekDates(anchorYmd);
+    const a = parseYmd(dates[0]);
+    const b = parseYmd(dates[4]);
+    return `第 ${Math.ceil((((a - new Date(a.getFullYear(), 0, 1)) / 86400000) + new Date(a.getFullYear(), 0, 1).getDay() + 1) / 7) || 1} 周（${dates[0]} ~ ${dates[4]}）`;
+}
+
+function shiftAnchor(anchorYmd, view, delta) {
+    const d = parseYmd(anchorYmd) || new Date();
+    if (view === 'month') d.setMonth(d.getMonth() + delta);
+    else d.setDate(d.getDate() + 7 * delta);
+    return ymd(d);
+}
+
+function getAttendanceCell(dateStr, studentName) {
+    const dayMap = state.attendance.records[dateStr];
+    if (!dayMap) return { status: null, note: '' };
+    const cell = dayMap[studentName];
+    return cell ? { status: cell.status || null, note: cell.note || '' } : { status: null, note: '' };
+}
+
+function setAttendanceCell(dateStr, studentName, status, note = '') {
+    if (!state.attendance.records[dateStr]) state.attendance.records[dateStr] = {};
+    if (status === null && !note) {
+        // 完全清空时移除该键，保持 records 精简
+        const dayMap = state.attendance.records[dateStr];
+        if (dayMap[studentName]) {
+            delete dayMap[studentName];
+            if (Object.keys(dayMap).length === 0) delete state.attendance.records[dateStr];
+        }
+    } else {
+        state.attendance.records[dateStr][studentName] = { status, note };
+    }
+}
+
+function nextStatus(current) {
+    const i = ATTENDANCE_STATUS.indexOf(current);
+    return i === -1 ? ATTENDANCE_STATUS[0] : ATTENDANCE_STATUS[(i + 1) % ATTENDANCE_STATUS.length];
+}
+
+function activeStudents() {
+    // 不计轮空
+    return state.students.filter(s => !s.resting);
+}
+
+function renderAttendanceControls() {
+    const view = state.attendance.view;
+    const wkBtn = $('attendanceViewWeek');
+    const moBtn = $('attendanceViewMonth');
+    if (wkBtn) wkBtn.classList.toggle('active', view === 'week');
+    if (moBtn) moBtn.classList.toggle('active', view === 'month');
+
+    const anchor = state.attendance.anchorDate || ymd(new Date());
+    state.attendance.anchorDate = anchor;
+    const dateInput = $('attendanceAnchorDate');
+    if (dateInput) dateInput.value = anchor;
+
+    const label = $('attendanceAnchorLabel');
+    if (label) label.textContent = formatAnchorLabel(anchor, view);
+}
+
+function renderAttendanceTable() {
+    const container = $('attendanceTableContainer');
+    if (!container) return;
+
+    if (state.students.length === 0) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>请先在「学生管理」导入学生数据</p></div>';
+        return;
+    }
+
+    const view = state.attendance.view;
+    const dates = view === 'month' ? getMonthDates(state.attendance.anchorDate) : getWeekDates(state.attendance.anchorDate);
+    const today = ymd(new Date());
+
+    // 表头：第一列"学生"，其余每个日期一列
+    const thead = ['<tr><th class="att-th-student">学生</th>'];
+    dates.forEach(d => {
+        const dt = parseYmd(d);
+        const dow = dt.getDay();
+        const isWeekend = dow === 0 || dow === 6;
+        const isToday = d === today;
+        const cls = ['att-th-date'];
+        if (isWeekend) cls.push('weekend');
+        if (isToday) cls.push('today');
+        thead.push(`<th class="${cls.join(' ')}">${d.slice(5)}<br><span class="att-th-dow">${DAY_NAMES[dow]}</span></th>`);
+    });
+    thead.push('<th class="att-th-stat">出勤</th><th class="att-th-stat">迟到</th><th class="att-th-stat">请假</th><th class="att-th-stat">补到</th><th class="att-th-stat">出勤率</th>');
+    thead.push('</tr>');
+
+    // 表体
+    const tbody = [];
+    state.students.forEach((s, idx) => {
+        const cells = [];
+        let cntP = 0, cntL = 0, cntLv = 0, cntM = 0, cntTracked = 0;
+        dates.forEach(d => {
+            const cell = getAttendanceCell(d, s.name);
+            const status = cell.status;
+            if (status) cntTracked++;
+            if (status === 'present') cntP++;
+            else if (status === 'late') cntL++;
+            else if (status === 'leave') cntLv++;
+            else if (status === 'makeup') cntM++;
+            const statusCls = status ? `cell-${status}` : 'cell-empty';
+            const noteAttr = cell.note ? ` data-note="${escapeAttr(cell.note)}"` : '';
+            const label = status ? ATTENDANCE_LABELS[status] : '-';
+            const noteMark = cell.note ? '<span class="att-note-mark" title="' + escapeAttr(cell.note) + '">📝</span>' : '';
+            cells.push(`<td class="att-cell ${statusCls}" data-date="${d}" data-student="${escapeAttr(s.name)}" data-idx="${idx}"${noteAttr}><span class="att-cell-label">${label}</span>${noteMark}</td>`);
+        });
+        const rate = cntTracked === 0 ? '-' : Math.round((cntP / cntTracked) * 100) + '%';
+        tbody.push(`<tr${s.resting ? ' class="att-row-resting"' : ''}><td class="att-td-student"><span class="att-student-name">${escapeHtml(s.name)}</span><span class="att-student-gender ${s.gender === '男' ? 'male' : 'female'}">${s.gender || ''}</span></td>${cells.join('')}<td class="att-td-stat att-stat-present">${cntP}</td><td class="att-td-stat att-stat-late">${cntL}</td><td class="att-td-stat att-stat-leave">${cntLv}</td><td class="att-td-stat att-stat-makeup">${cntM}</td><td class="att-td-stat att-stat-rate">${rate}</td></tr>`);
+    });
+
+    container.innerHTML = `<div class="attendance-table-scroll"><table class="attendance-table"><thead>${thead.join('')}</thead><tbody>${tbody.join('')}</tbody></table></div>`;
+
+    // 单元格点击：事件委托
+    const scroll = container.querySelector('.attendance-table-scroll');
+    if (scroll && !scroll.dataset.bound) {
+        scroll.addEventListener('click', onAttendanceCellClick);
+        scroll.dataset.bound = '1';
+    }
+}
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+function onAttendanceCellClick(e) {
+    const td = e.target.closest('td.att-cell');
+    if (!td) return;
+    const date = td.dataset.date;
+    const studentName = td.dataset.student;
+    if (!date || !studentName) return;
+    const cur = getAttendanceCell(date, studentName);
+    const nxt = nextStatus(cur.status);
+
+    if (nxt === 'leave' || nxt === 'makeup') {
+        openAttendanceNoteDialog(date, studentName, nxt, cur.note || '');
+    } else {
+        setAttendanceCell(date, studentName, nxt, '');
+        renderAttendancePage();
+        saveStateDebounced();
+    }
+}
+
+function openAttendanceNoteDialog(date, studentName, status, prefilledNote) {
+    const dlg = $('attendanceNoteDialog');
+    if (!dlg) return;
+    dlg.dataset.date = date;
+    dlg.dataset.student = studentName;
+    dlg.dataset.status = status;
+    $('attendanceNoteLabel').textContent = `${date} · ${studentName} · ${ATTENDANCE_LABELS[status]}`;
+    $('attendanceNoteInput').value = prefilledNote || '';
+    $('attendanceNoteInput').placeholder = status === 'leave' ? '请填写请假事由（病假/事假等）' : '请填写补到说明';
+    dlg.classList.remove('hidden');
+    setTimeout(() => $('attendanceNoteInput').focus(), 50);
+}
+
+function closeAttendanceNoteDialog() {
+    const dlg = $('attendanceNoteDialog');
+    if (dlg) dlg.classList.add('hidden');
+}
+
+function confirmAttendanceNote() {
+    const dlg = $('attendanceNoteDialog');
+    if (!dlg) return;
+    const date = dlg.dataset.date;
+    const studentName = dlg.dataset.student;
+    const status = dlg.dataset.status;
+    const note = $('attendanceNoteInput').value.trim();
+    if (!note) {
+        showToast(status === 'leave' ? '请假需填写事由' : '补到需填写说明', 'warning');
+        return;
+    }
+    setAttendanceCell(date, studentName, status, note);
+    closeAttendanceNoteDialog();
+    renderAttendancePage();
+    saveStateDebounced();
+}
+
+function cancelAttendanceNote() {
+    closeAttendanceNoteDialog();
+}
+
+function updateAttendanceStats() {
+    const active = activeStudents();
+    const total = active.length;
+    const dates = state.attendance.view === 'month'
+        ? getMonthDates(state.attendance.anchorDate)
+        : getWeekDates(state.attendance.anchorDate);
+    const today = ymd(new Date());
+
+    let totalPresent = 0, totalTracked = 0;
+    let todayPresent = 0;
+    let periodLeave = 0, periodLate = 0;
+
+    active.forEach(s => {
+        dates.forEach(d => {
+            const cell = getAttendanceCell(d, s.name);
+            if (cell.status) {
+                totalTracked++;
+                if (cell.status === 'present') {
+                    totalPresent++;
+                    if (d === today) todayPresent++;
+                } else if (cell.status === 'leave') periodLeave++;
+                else if (cell.status === 'late') periodLate++;
+            }
+        });
+    });
+
+    const rate = totalTracked === 0 ? '-' : Math.round((totalPresent / totalTracked) * 100) + '%';
+    if ($('attTotalActive')) $('attTotalActive').textContent = total;
+    if ($('attTodayPresent')) $('attTodayPresent').textContent = `${todayPresent} / ${total}`;
+    if ($('attPeriodLeave')) $('attPeriodLeave').textContent = periodLeave;
+    if ($('attOverallRate')) $('attOverallRate').textContent = rate;
+}
+
+function renderAttendancePage() {
+    renderAttendanceControls();
+    updateAttendanceStats();
+    renderAttendanceTable();
+}
+
+function initAttendanceFromStudents() {
+    if (state.students.length === 0) {
+        showToast('请先导入学生数据', 'warning');
+        return;
+    }
+    if (Object.keys(state.attendance.records).length > 0) {
+        if (!confirm('已有考勤记录，确认要再次初始化吗？\n（已有记录不会被清空，仅补齐缺失学生）')) return;
+    } else {
+        if (!confirm('将从学生名单初始化考勤表，确认？')) return;
+    }
+    if (!state.attendance.initializedAt) state.attendance.initializedAt = new Date().toISOString();
+    // 仅初始化锚点为空；记录保持按天按需创建
+    showToast('考勤表已就绪', 'success');
+    renderAttendancePage();
+    saveStateDebounced();
+}
+
+function exportAttendanceExcel() {
+    if (state.students.length === 0) {
+        showToast('暂无考勤数据可导出', 'warning');
+        return;
+    }
+    const dates = state.attendance.view === 'month'
+        ? getMonthDates(state.attendance.anchorDate)
+        : getWeekDates(state.attendance.anchorDate);
+    const data = [];
+    data.push([`考勤记录（${dates[0]} ~ ${dates[dates.length - 1]}）`]);
+    const head = ['学生'];
+    dates.forEach(d => {
+        const dt = parseYmd(d);
+        head.push(`${d} ${DAY_NAMES[dt.getDay()]}`);
+    });
+    data.push(head);
+    state.students.forEach(s => {
+        const row = [`${s.name}${s.gender ? '(' + s.gender + ')' : ''}`];
+        dates.forEach(d => {
+            const cell = getAttendanceCell(d, s.name);
+            if (!cell.status) { row.push(''); return; }
+            row.push(cell.note ? `${ATTENDANCE_LABELS[cell.status]}(${cell.note})` : ATTENDANCE_LABELS[cell.status]);
+        });
+        data.push(row);
+    });
+    // 每日出勤汇总
+    data.push([]);
+    data.push(['每日出勤 X/Y']);
+    dates.forEach(d => {
+        let p = 0, total = 0;
+        activeStudents().forEach(s => {
+            const c = getAttendanceCell(d, s.name);
+            if (c.status) { total++; if (c.status === 'present') p++; }
+        });
+        data.push([d, `${p} / ${total}`]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 16 }, ...dates.map(() => ({ wch: 14 }))];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '考勤');
+    const fname = `考勤_${dates[0]}_${dates[dates.length - 1]}${state.attendance.view === 'month' ? '_月' : '_周'}.xlsx`;
+    XLSX.writeFile(wb, fname);
+    showToast('Excel 导出成功', 'success');
+}
+
+function printAttendance() { window.print(); }
 
 // ===== 值班表生成 =====
 /**
@@ -1284,6 +1631,37 @@ $('btnRollReset').addEventListener('click', resetRollcall);
     if (el) el.addEventListener('change', renderRollcallPage);
 });
 
+// 考勤按钮绑定
+if ($('attendanceViewWeek')) $('attendanceViewWeek').addEventListener('click', () => { state.attendance.view = 'week'; renderAttendancePage(); saveStateDebounced(); });
+if ($('attendanceViewMonth')) $('attendanceViewMonth').addEventListener('click', () => { state.attendance.view = 'month'; renderAttendancePage(); saveStateDebounced(); });
+if ($('attendanceAnchorDate')) $('attendanceAnchorDate').addEventListener('change', (e) => {
+    if (e.target.value) { state.attendance.anchorDate = e.target.value; renderAttendancePage(); saveStateDebounced(); }
+});
+if ($('btnAttendancePrev')) $('btnAttendancePrev').addEventListener('click', () => {
+    state.attendance.anchorDate = shiftAnchor(state.attendance.anchorDate || ymd(new Date()), state.attendance.view, -1);
+    renderAttendancePage(); saveStateDebounced();
+});
+if ($('btnAttendanceToday')) $('btnAttendanceToday').addEventListener('click', () => {
+    state.attendance.anchorDate = ymd(new Date()); renderAttendancePage(); saveStateDebounced();
+});
+if ($('btnAttendanceNext')) $('btnAttendanceNext').addEventListener('click', () => {
+    state.attendance.anchorDate = shiftAnchor(state.attendance.anchorDate || ymd(new Date()), state.attendance.view, 1);
+    renderAttendancePage(); saveStateDebounced();
+});
+if ($('btnAttendanceInit')) $('btnAttendanceInit').addEventListener('click', initAttendanceFromStudents);
+if ($('btnAttendanceExport')) $('btnAttendanceExport').addEventListener('click', exportAttendanceExcel);
+if ($('btnAttendancePrint')) $('btnAttendancePrint').addEventListener('click', printAttendance);
+if ($('attendanceNoteOk')) $('attendanceNoteOk').addEventListener('click', confirmAttendanceNote);
+if ($('attendanceNoteCancel')) $('attendanceNoteCancel').addEventListener('click', cancelAttendanceNote);
+if ($('attendanceNoteInput')) $('attendanceNoteInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') confirmAttendanceNote();
+    else if (e.key === 'Escape') cancelAttendanceNote();
+});
+document.addEventListener('click', (e) => {
+    const dlg = $('attendanceNoteDialog');
+    if (dlg && !dlg.classList.contains('hidden') && !dlg.contains(e.target) && !e.target.closest('.att-cell')) closeAttendanceNoteDialog();
+});
+
 // ===== 初始化 =====
 (function init() {
     const cached = loadState();
@@ -1305,6 +1683,12 @@ $('btnRollReset').addEventListener('click', resetRollcall);
         }
         if (cached.seatingConfig && typeof cached.seatingConfig === 'object') {
             Object.assign(state.seatingConfig, cached.seatingConfig);
+        }
+        if (cached.attendance && typeof cached.attendance === 'object') {
+            state.attendance.view = cached.attendance.view === 'month' ? 'month' : 'week';
+            state.attendance.anchorDate = typeof cached.attendance.anchorDate === 'string' ? cached.attendance.anchorDate : null;
+            state.attendance.records = (cached.attendance.records && typeof cached.attendance.records === 'object') ? cached.attendance.records : {};
+            state.attendance.initializedAt = cached.attendance.initializedAt || null;
         }
     }
 
@@ -1357,4 +1741,6 @@ $('btnRollReset').addEventListener('click', resetRollcall);
     if (state.schedule) renderDutyTable();
     // 如果之前已经生成了座位表，重新渲染
     if (state.seating) renderSeating();
+    // 考勤页面：先把锚点对齐到今天/本月，渲染一次备用
+    if (typeof renderAttendancePage === 'function') renderAttendancePage();
 })();
