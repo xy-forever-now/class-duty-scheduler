@@ -128,6 +128,19 @@ body {
     padding: 8px 0;
 }
 
+/* 钉死底部的菜单区域（学生管理） */
+.nav-pinned {
+    flex-shrink: 0;
+}
+.nav-pinned .nav-divider {
+    margin: 0 12px;
+}
+.nav-list-pinned {
+    flex: none;
+    overflow: visible;
+    padding: 0 0 4px;
+}
+
 .nav-item {
     display: flex;
     align-items: center;
