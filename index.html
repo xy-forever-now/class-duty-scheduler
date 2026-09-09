@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>班级工作台 - 智能排班系统</title>
+    <link rel="stylesheet" href="style.css?v=20260909-2320">
+</head>
+<body>
+    <div class="app">
+        <!-- 左侧菜单栏 -->
+        <nav class="nav-menu" id="navMenu">
+            <div class="nav-header">
+                <div class="nav-logo">📋</div>
+                <div class="nav-title">
+                    <div class="nav-app-name">班级工作台</div>
+                    <div class="nav-app-sub">v1.0</div>
+                </div>
+                <button class="nav-toggle" id="navToggle" title="折叠菜单">◀</button>
+            </div>
+
+            <ul class="nav-list">
+                <li class="nav-item active" data-page="duty">
+                    <span class="nav-icon">🗓️</span>
+                    <span class="nav-text">值班表</span>
+                </li>
+                <li class="nav-item" data-page="seating">
+                    <span class="nav-icon">🪑</span>
+                    <span class="nav-text">座位表</span>
+                </li>
+                <li class="nav-item" data-page="students">
+                    <span class="nav-icon">👥</span>
+                    <span class="nav-text">学生管理</span>
+                </li>
+                <li class="nav-item" data-page="rollcall">
+                    <span class="nav-icon">🎯</span>
+                    <span class="nav-text">随机点名</span>
+                </li>
+                <li class="nav-divider"></li>
+                <li class="nav-item disabled" data-page="attendance">
+                    <span class="nav-icon">✅</span>
+                    <span class="nav-text">考勤记录</span>
+                    <span class="nav-badge">即将上线</span>
+                </li>
+                <li class="nav-item disabled" data-page="score">
+                    <span class="nav-icon">📊</span>
+                    <span class="nav-text">积分统计</span>
+                    <span class="nav-badge">即将上线</span>
+                </li>
+                <li class="nav-item disabled" data-page="notice">
+                    <span class="nav-icon">📢</span>
+                    <span class="nav-text">班级通知</span>
+                    <span class="nav-badge">即将上线</span>
+                </li>
+                <li class="nav-divider"></li>
+                <li class="nav-item disabled" data-page="settings">
+                    <span class="nav-icon">🔧</span>
+                    <span class="nav-text">系统设置</span>
+                    <span class="nav-badge">即将上线</span>
+                </li>
+            </ul>
+
+            <div class="nav-footer">
+                <div class="nav-stat">
+                    <div class="nav-stat-item">
+                        <div class="nav-stat-num" id="navStudentCount">0</div>
+                        <div class="nav-stat-label">学生</div>
+                    </div>
+                    <div class="nav-stat-item">
+                        <div class="nav-stat-num" id="navWeekCount">0</div>
+                        <div class="nav-stat-label">周次</div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- 主内容容器 -->
+        <div class="app-container">
+            <!-- 顶部标题栏 -->
+            <header class="header">
+                <div class="header-left">
+                    <h1 id="pageTitle">🗓️ 值班表</h1>
+                    <span class="subtitle" id="pageSubtitle">智能排班系统</span>
+                </div>
+                <div class="header-right">
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                    <button id="btnGenerate" class="btn btn-success" disabled data-show-on="duty">
+                        🎲 生成值班表
+                    </button>
+                    <button id="btnExport" class="btn btn-warning" disabled data-show-on="duty">
+                        📤 导出Excel
+                    </button>
+                    <button id="btnPrint" class="btn btn-info" disabled data-show-on="duty">
+                        🖨️ 打印
+                    </button>
+                </div>
+            </header>
+
+            <!-- 主内容区 -->
+            <main class="main">
+                <!-- =============== 值班表页面（含排班配置） =============== -->
+                <section class="page" data-page="duty">
+                    <div class="config-bar">
+                        <div class="config-item">
+                            <label for="startDate">起始日期</label>
+                            <input type="date" id="startDate">
+                        </div>
+                        <div class="config-item">
+                            <label for="weekCycle">排班周期</label>
+                            <select id="weekCycle">
+                                <option value="1">单周</option>
+                                <option value="2" selected>双周（两周轮换）</option>
+                                <option value="4">四周轮换</option>
+                            </select>
+                        </div>
+                        <div class="config-item">
+                            <label for="strategy">分配策略</label>
+                            <select id="strategy">
+                                <option value="balanced">均衡分配（推荐）</option>
+                                <option value="random">随机分配</option>
+                                <option value="duty-based">按性别优先</option>
+                            </select>
+                        </div>
+                        <div class="config-item config-item-duties">
+                            <label>每日职务及人数</label>
+                            <div id="dutyCheckboxes" class="duty-chip-list">
+                                <span class="duty-chip">
+                                    🧹 扫地
+                                    <input type="number" class="duty-count" data-duty="扫地" value="2" min="0" max="5">
+                                </span>
+                                <span class="duty-chip">
+                                    📝 擦黑板
+                                    <input type="number" class="duty-count" data-duty="擦黑板" value="1" min="0" max="5">
+                                </span>
+                                <span class="duty-chip">
+                                    🗑️ 倒垃圾
+                                    <input type="number" class="duty-count" data-duty="倒垃圾" value="1" min="0" max="5">
+                                </span>
+                                <span class="duty-chip">
+                                    🪑 摆桌椅
+                                    <input type="number" class="duty-count" data-duty="摆桌椅" value="1" min="0" max="5">
+                                </span>
+                            </div>
+                        </div>
+                        <div class="config-item config-item-tip">
+                            <span class="config-slot-text" id="dutySlotInfo">每周坑位 25 ／ 可排 0 人</span>
+                            <span class="config-tip-inline">💡 坑位＜人数时会有人轮空，轮空同学下周优先；坑位＞人数时多出的岗位由已排同学补位</span>
+                        </div>
+                    </div>
+
+                    <div id="currentWeek" class="week-info-bar"></div>
+                    <div id="dutyTableContainer" class="duty-table-container">
+                        <div class="empty-state">
+                            <div class="empty-icon">📅</div>
+                            <p>请先导入学生数据，然后点击"生成值班表"</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- =============== 学生管理页面 =============== -->
+                <section class="page hidden" data-page="students">
+                    <div class="content-header-bar">
+                        <h2>👥 学生管理</h2>
+                        <div>
+                            <button class="btn btn-primary" id="btnImportStudents">
+                                📥 导入学生
+                            </button>
+                            <button class="btn btn-warning" id="btnClearStudents">
+                                🗑️ 清空名单
+                            </button>
+                        </div>
+                    </div>
+                    <div class="student-stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-card-num" id="pageTotalCount">0</div>
+                            <div class="stat-card-label">班级总人数</div>
+                        </div>
+                        <div class="stat-card stat-male">
+                            <div class="stat-card-num" id="pageMaleCount">0</div>
+                            <div class="stat-card-label">男生</div>
+                        </div>
+                        <div class="stat-card stat-female">
+                            <div class="stat-card-num" id="pageFemaleCount">0</div>
+                            <div class="stat-card-label">女生</div>
+                        </div>
+                    </div>
+                    <div id="pageStudentList" class="page-student-list"></div>
+                    <div class="resting-hint" id="restingHint" style="display:none;">
+                        💡 勾选"轮空"的学生将不参与本周排班，但下周可恢复
+                    </div>
+                </section>
+
+                <!-- =============== 随机点名（转盘）页面 =============== -->
+                <section class="page hidden" data-page="rollcall">
+                    <div class="content-header-bar">
+                        <h2>🎯 随机点名</h2>
+                        <div>
+                            <button class="btn btn-primary" id="btnRollSpin">🎰 启动转盘</button>
+                            <button class="btn btn-warning" id="btnRollReset">🔄 重置记录</button>
+                        </div>
+                    </div>
+
+                    <div class="rollcall-stats">
+                        <div class="stat-card">
+                            <div class="stat-card-num" id="rollTotalCount">0</div>
+                            <div class="stat-card-label">候选人数</div>
+                        </div>
+                        <div class="stat-card stat-rolled">
+                            <div class="stat-card-num" id="rollCalledCount">0</div>
+                            <div class="stat-card-label">已被点到</div>
+                        </div>
+                        <div class="stat-card stat-resting">
+                            <div class="stat-card-num" id="rollRestingCount">0</div>
+                            <div class="stat-card-label">轮空人数</div>
+                        </div>
+                    </div>
+
+                    <div class="rollcall-stage">
+                        <div class="wheel-wrapper">
+                            <div class="wheel-pointer">▼</div>
+                            <canvas id="wheelCanvas" width="480" height="480"></canvas>
+                            <div class="wheel-center">🎯</div>
+                        </div>
+
+                        <div class="rollcall-side">
+                            <div class="rollcall-result-box">
+                                <div class="rollcall-result-label">本轮结果</div>
+                                <div class="rollcall-result-name" id="rollResultName">点击「启动转盘」开始</div>
+                                <div class="rollcall-result-meta" id="rollResultMeta"></div>
+                            </div>
+
+                            <div class="rollcall-options">
+                                <label class="opt-row">
+                                    <input type="checkbox" id="rollExcludeCalled" checked>
+                                    <span>已点过的人不再参与</span>
+                                </label>
+                                <label class="opt-row">
+                                    <input type="checkbox" id="rollAutoReset" checked>
+                                    <span>全部点完后自动重置</span>
+                                </label>
+                            </div>
+
+                            <div class="rollcall-history">
+                                <div class="rollcall-history-head">📜 已被点到 <span id="rollHistoryCount">0</span> 人</div>
+                                <div class="rollcall-history-list" id="rollHistoryList">
+                                    <div class="rollcall-history-empty">还没有记录</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- =============== 座位表页面 =============== -->
+                <section class="page hidden" data-page="seating">
+                    <div class="content-header-bar">
+                        <h2>🪑 座位表</h2>
+                        <div>
+                            <button class="btn btn-success" id="btnSeatGenerate">🎲 随机排座</button>
+                            <button class="btn btn-warning" id="btnSeatExport" disabled>📤 导出Excel</button>
+                            <button class="btn btn-info" id="btnSeatPrint" disabled>🖨️ 打印</button>
+                        </div>
+                    </div>
+
+                    <div class="config-bar">
+                        <div class="config-item">
+                            <label for="seatRows">排数（纵向）</label>
+                            <input type="number" id="seatRows" value="6" min="1" max="20">
+                        </div>
+                        <div class="config-item">
+                            <label for="seatCols">列数（横向）</label>
+                            <input type="number" id="seatCols" value="6" min="1" max="20">
+                        </div>
+                        <div class="config-item">
+                            <label for="seatMode">排列方式</label>
+                            <select id="seatMode">
+                                <option value="random">完全随机</option>
+                                <option value="gender-mix">男女穿插</option>
+                                <option value="gender-block">男女分区</option>
+                            </select>
+                        </div>
+                        <div class="config-item seat-capacity">
+                            <label>座位 / 人数</label>
+                            <div class="seat-capacity-text" id="seatCapacity">36 / 0</div>
+                        </div>
+                    </div>
+
+                    <div id="seatingContainer" class="seating-container">
+                        <div class="empty-state">
+                            <div class="empty-icon">🪑</div>
+                            <p>请先导入学生数据，设置排数和列数后点击"随机排座"</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 占位页面 -->
+                <section class="page hidden" data-page="placeholder">
+                    <div class="empty-state">
+                        <div class="empty-icon">🚧</div>
+                        <p>该功能正在建设中，敬请期待</p>
+                    </div>
+                </section>
+            </main>
+
+            <!-- 底部状态栏 -->
+            <footer class="footer">
+                <span id="statusText">就绪</span>
+                <span class="version">v1.0</span>
+            </footer>
+        </div>
+    </div>
+
+    <!-- Toast 提示 -->
+    <div id="toast" class="toast"></div>
+
+    <!-- SheetJS 库（用于Excel解析） -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="app.js?v=20260909-2320"></script>
+</body>
+</html>
