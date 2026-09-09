@@ -1139,12 +1139,21 @@ function bindScoreRowActions(container) {
     scroll.dataset.bound = '1';
     scroll.addEventListener('click', (e) => {
         const btn = e.target.closest('button[data-act]');
-        if (!btn) return;
-        const tr = btn.closest('tr.score-row');
+        if (btn) {
+            // 点 +/- 按钮只弹加减分，不弹明细
+            const tr = btn.closest('tr.score-row');
+            if (!tr) return;
+            e.stopPropagation();
+            openScoreAdjustDialog(tr.dataset.student, btn.dataset.act === 'plus' ? 1 : -1);
+            return;
+        }
+        // 点行其他位置 → 弹该学生的积分明细
+        const tr = e.target.closest('tr.score-row');
         if (!tr) return;
-        const name = tr.dataset.student;
-        openScoreAdjustDialog(name, btn.dataset.act === 'plus' ? 1 : -1);
+        openScoreDetailDialog(tr.dataset.student);
     });
+    // hover 提示整行可点击
+    scroll.addEventListener('mousemove', () => {});
 }
 
 function renderScoreDetail() {
@@ -1233,6 +1242,66 @@ function confirmScoreAdjust() {
     closeScoreAdjustDialog();
     renderScorePage();
     saveStateDebounced();
+}
+
+// ===== 学生积分明细弹窗 =====
+function openScoreDetailDialog(studentName) {
+    const dlg = $('scoreDetailDialog');
+    if (!dlg) return;
+    // 该学生的所有积分记录（按时间倒序）
+    const entries = state.score.log
+        .filter(e => e.studentName === studentName)
+        .sort((a, b) => {
+            // 倒序：日期降序 + ts 降序
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            return (b.ts || 0) - (a.ts || 0);
+        });
+    const total = entries.reduce((s, e) => s + e.delta, 0);
+    const plus = entries.filter(e => e.delta > 0).reduce((s, e) => s + e.delta, 0);
+    const minus = entries.filter(e => e.delta < 0).reduce((s, e) => s + e.delta, 0);
+
+    // 统计各来源
+    const bySource = {};
+    entries.forEach(e => {
+        if (!bySource[e.source]) bySource[e.source] = { count: 0, sum: 0 };
+        bySource[e.source].count++;
+        bySource[e.source].sum += e.delta;
+    });
+    const sourceRows = Object.keys(bySource).sort((a, b) => bySource[b].sum - bySource[a].sum)
+        .map(s => `<div class="score-detail-source"><span class="score-source-tag tag-${s}">${sourceLabel(s)}</span><span class="score-source-count">${bySource[s].count} 条</span><span class="score-source-sum ${bySource[s].sum > 0 ? 'plus' : (bySource[s].sum < 0 ? 'minus' : 'zero')}">${bySource[s].sum > 0 ? '+' : ''}${bySource[s].sum}</span></div>`)
+        .join('');
+
+    const listHtml = entries.length === 0
+        ? '<div class="score-detail-empty">暂无积分记录</div>'
+        : entries.map(e => {
+            const tag = `<span class="score-source-tag tag-${e.source}">${sourceLabel(e.source)}</span>`;
+            const reason = e.reason ? `<span class="score-detail-reason">${escapeHtml(e.reason)}</span>` : '<span class="score-detail-reason muted">（无理由）</span>';
+            const deltaCls = e.delta > 0 ? 'plus' : (e.delta < 0 ? 'minus' : 'zero');
+            const deltaText = e.delta > 0 ? '+' + e.delta : e.delta;
+            return `<div class="score-detail-item">
+                <div class="score-detail-date">${e.date}</div>
+                <div class="score-detail-tag">${tag}</div>
+                <div class="score-detail-reason-wrap">${reason}</div>
+                <div class="score-detail-delta ${deltaCls}">${deltaText}</div>
+            </div>`;
+        }).join('');
+
+    dlg.querySelector('#scoreDetailTitle').textContent = `📋 ${studentName} 的积分明细`;
+    dlg.querySelector('#scoreDetailSummary').innerHTML = `
+        <div class="score-detail-card"><div class="score-detail-card-num ${total > 0 ? 'plus' : (total < 0 ? 'minus' : 'zero')}">${total}</div><div class="score-detail-card-label">净分</div></div>
+        <div class="score-detail-card"><div class="score-detail-card-num plus">+${plus}</div><div class="score-detail-card-label">总加分</div></div>
+        <div class="score-detail-card"><div class="score-detail-card-num minus">${minus}</div><div class="score-detail-card-label">总减分</div></div>
+        <div class="score-detail-card"><div class="score-detail-card-num">${entries.length}</div><div class="score-detail-card-label">记录数</div></div>
+    `;
+    dlg.querySelector('#scoreDetailSourceSummary').innerHTML = sourceRows || '';
+    dlg.querySelector('#scoreDetailList').innerHTML = listHtml;
+    dlg.querySelector('#scoreDetailFooter').textContent = `共 ${entries.length} 条记录，加分 ${plus} / 减分 ${minus}`;
+    dlg.classList.remove('hidden');
+}
+
+function closeScoreDetailDialog() {
+    const dlg = $('scoreDetailDialog');
+    if (dlg) dlg.classList.add('hidden');
 }
 
 function exportScoreExcel() {
@@ -2300,6 +2369,16 @@ if ($('scoreRulesCancel')) $('scoreRulesCancel').addEventListener('click', close
 if ($('scoreRulesReset')) $('scoreRulesReset').addEventListener('click', resetScoreRulesDialog);
 if ($('scoreAdjustOk')) $('scoreAdjustOk').addEventListener('click', confirmScoreAdjust);
 if ($('scoreAdjustCancel')) $('scoreAdjustCancel').addEventListener('click', closeScoreAdjustDialog);
+// 积分明细弹窗关闭
+if ($('scoreDetailClose')) $('scoreDetailClose').addEventListener('click', closeScoreDetailDialog);
+document.addEventListener('click', (e) => {
+    const dlg = $('scoreDetailDialog');
+    if (!dlg || dlg.classList.contains('hidden')) return;
+    if (dlg.contains(e.target)) return;
+    // 行点击、+/- 按钮不算外部
+    if (e.target.closest('tr.score-row, .btn-mini')) return;
+    closeScoreDetailDialog();
+});
 document.addEventListener('click', (e) => {
     const btn = e.target.closest('.score-preset-btn');
     if (btn) {
