@@ -403,18 +403,29 @@ function updateStudentStats() {
     }
 }
 
-// 清空学生
+// 清空学生（一键重置本地所有记录，保留排班/座位/点名配置项）
 $('btnClearStudents').addEventListener('click', () => {
     if (state.students.length === 0) {
         showToast('当前没有学生数据', 'info');
         return;
     }
-    if (confirm(`确认清空全部 ${state.students.length} 名学生？\n此操作不可撤销。`)) {
+    if (confirm(`确认清空全部 ${state.students.length} 名学生？\n\n将同时清空：\n· 值班表\n· 座位表\n· 随机点名记录\n· 本地所有缓存\n\n此操作不可撤销。`)) {
+        // 1) 重置所有运行时结果数据（配置项保留：起始日期/周期/策略/职务数/座位行列/点名选项）
         state.students = [];
         state.schedule = null;
         state.seating = null;
         state.rollcall.history = [];
         state.rollcall.lastResult = null;
+
+        // 2) 清空 localStorage 中本应用的所有键（含历史版本残留）
+        try {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+                const k = localStorage.key(i);
+                if (k && k.startsWith('class-workbench')) localStorage.removeItem(k);
+            }
+        } catch (err) { /* ignore */ }
+
+        // 3) 重置各页面 DOM 与状态
         updateStudentStats();
         updateSeatCapacity();
         updateDutySlotInfo();
@@ -427,8 +438,14 @@ $('btnClearStudents').addEventListener('click', () => {
         $('btnSeatExport').disabled = true;
         $('btnSeatPrint').disabled = true;
         $('currentWeek').textContent = '';
-        showToast('已清空学生名单', 'success');
-        saveState();
+
+        // 4) 同步刷新当前所在页面（其它页面在切换时也会重新渲染）
+        if (state.currentPage === 'rollcall' && typeof renderRollcallPage === 'function') {
+            renderRollcallPage();
+        }
+        setStatus('已重置全部本地记录');
+
+        showToast('已清空全部本地记录，恢复到最初状态', 'success');
     }
 });
 
