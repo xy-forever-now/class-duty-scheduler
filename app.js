@@ -2271,7 +2271,11 @@ if ($('attendanceNoteInput')) $('attendanceNoteInput').addEventListener('keydown
 });
 document.addEventListener('click', (e) => {
     const dlg = $('attendanceNoteDialog');
-    if (dlg && !dlg.classList.contains('hidden') && !dlg.contains(e.target) && !e.target.closest('.att-cell')) closeAttendanceNoteDialog();
+    if (!dlg || dlg.classList.contains('hidden')) return;
+    if (dlg.contains(e.target)) return;
+    // 点 cell 本身、cell 菜单按钮、cell 菜单项时不关闭（避免打开即关）
+    if (e.target.closest('.att-cell, .att-cell-menu-btn, .att-cell-menu-item, #attendanceCellMenu')) return;
+    closeAttendanceNoteDialog();
 });
 
 // 积分按钮绑定
