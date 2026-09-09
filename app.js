@@ -1028,15 +1028,8 @@ function reconcileDutyScores() {
 
 // 从点名 history 补齐
 function reconcileRollcallScores() {
-    if (!state.rollcall || !Array.isArray(state.rollcall.history)) return 0;
-    const ruleRoll = getScoreRules().rollcall;
-    let added = 0;
-    // 用日期粒度：用今天作为 rollcall 项目的聚合日期（rollcall 没有按日期拆分历史）
-    const date = ymd(new Date());
-    state.rollcall.history.forEach(name => {
-        if (addScoreEntry(date, name, 'rollcall', ruleRoll, '点名出勤')) added++;
-    });
-    return added;
+    // 点名命中不再自动加分 —— 由老师点名后在结果区手动点击「加分」控制
+    return 0;
 }
 
 function reconcileScoreLog() {
@@ -1341,7 +1334,7 @@ function renderScoreRulesTip() {
     const r = getScoreRules();
     const a = r.attendance;
     const fmt = v => (v > 0 ? `+${v}` : `${v}`);
-    el.textContent = `出勤${fmt(a.present)} / 迟到${fmt(a.late)} / 补到${fmt(a.makeup)} / 请假${fmt(a.leave)} · 值日${fmt(r.duty)} · 点名${fmt(r.rollcall)} · 点「⚙️ 规则」可改`;
+    el.textContent = `出勤${fmt(a.present)} / 迟到${fmt(a.late)} / 补到${fmt(a.makeup)} / 请假${fmt(a.leave)} · 值日${fmt(r.duty)} · 点名手动加分 · 点「⚙️ 规则」可改`;
 }
 
 // 把当前规则写回 state.score.rules（保证结构完整）
@@ -2021,6 +2014,7 @@ function renderRollcallPage() {
             }
         }
     }
+    renderRollAwardButton();
 }
 
 /**
@@ -2184,6 +2178,7 @@ function finishSpin(winner) {
         const tag = winner.gender ? `${winner.gender}` : '未知';
         $('rollResultMeta').textContent = `第 ${state.rollcall.history.length} 位 · ${tag}`;
     }
+    renderRollAwardButton();
 
     renderRollcallPage();
     saveState();
@@ -2192,6 +2187,42 @@ function finishSpin(winner) {
     const remaining = getRollCandidates();
     if (remaining.length === 0 && autoReset && state.rollcall.history.length >= state.students.filter(s => !s.resting).length) {
         showToast('🎉 已被点完一轮，自动重置记录', 'success');
+    }
+}
+
+/**
+ * 点命中的手动加分按钮：显示/隐藏 + 已加过状态
+ * 状态以「今天 + 该学生」是否已有 rollcall 加分记录判断（刷新后依然正确）
+ */
+function renderRollAwardButton() {
+    const btn = $('btnRollAward');
+    if (!btn) return;
+    const last = state.rollcall.lastResult;
+    const meta = $('rollResultMeta');
+    if (!last || state.rollcall.spinning || !meta || !meta.textContent) {
+        btn.classList.add('hidden');
+        return;
+    }
+    btn.classList.remove('hidden');
+    const awarded = hasScoreEntry(ymd(new Date()), last.name, 'manual', '点名回答');
+    btn.disabled = awarded;
+    btn.textContent = awarded ? '✓ 本轮已加分' : '⭐ +1 加分';
+}
+
+/**
+ * 老师点击「+1 加分」：给命中的学生手动加 1 分
+ */
+function awardRollPoint() {
+    const last = state.rollcall.lastResult;
+    if (!last) return;
+    const ok = addScoreEntry(ymd(new Date()), last.name, 'manual', 1, '点名回答');
+    if (ok) {
+        saveState();
+        renderRollAwardButton();
+        showToast(`已给 ${last.name} 加 1 分（点名回答）`, 'success');
+    } else {
+        showToast('该生本轮已加过分', 'info');
+        renderRollAwardButton();
     }
 }
 
@@ -2238,6 +2269,7 @@ function renderRollHistory() {
 
 $('btnRollSpin').addEventListener('click', spinWheel);
 $('btnRollReset').addEventListener('click', resetRollcall);
+if ($('btnRollAward')) $('btnRollAward').addEventListener('click', awardRollPoint);
 ['rollExcludeCalled', 'rollAutoReset'].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener('change', renderRollcallPage);

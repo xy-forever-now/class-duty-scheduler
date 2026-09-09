@@ -231,6 +231,7 @@
                                 <div class="rollcall-result-label">本轮结果</div>
                                 <div class="rollcall-result-name" id="rollResultName">点击「启动转盘」开始</div>
                                 <div class="rollcall-result-meta" id="rollResultMeta"></div>
+                                <button class="btn btn-success btn-roll-award hidden" id="btnRollAward">⭐ +1 加分</button>
                             </div>
 
                             <div class="rollcall-options">
@@ -447,7 +448,7 @@
                         </div>
                         <div class="config-item config-item-tip">
                             <span class="config-slot-text">规则</span>
-                            <span class="config-tip-inline" id="scoreRulesTip">出勤+1 / 迟到-1 / 补到+2 / 请假±0 · 值日+2 · 点名+1 · 点击「⚙️ 规则」可改</span>
+                            <span class="config-tip-inline" id="scoreRulesTip">出勤+1 / 迟到-1 / 补到+2 / 请假±0 · 值日+2 · 点名手动加分 · 点击「⚙️ 规则」可改</span>
                         </div>
                     </div>
 
@@ -515,15 +516,12 @@
                                 </div>
                             </div>
                             <div class="score-rules-section">
-                                <div class="score-rules-title">🗓️ 值班 / 🎯 点名联动</div>
+                                <div class="score-rules-title">🗓️ 值班联动</div>
                                 <div class="score-rules-row">
                                     <label>值班一次</label>
                                     <input type="number" id="ruleDuty" step="1">
                                 </div>
-                                <div class="score-rules-row">
-                                    <label>被点到一次</label>
-                                    <input type="number" id="ruleRoll" step="1">
-                                </div>
+                                <div class="score-rules-note" style="margin:8px 0 0;">🎯 点名命中不自动加分，由老师在点名结果区手动点击「加分」。</div>
                             </div>
                         </div>
                         <div class="attendance-note-actions">

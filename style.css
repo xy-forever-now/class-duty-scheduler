@@ -977,6 +977,22 @@ body {
     color: #6b7280;
 }
 
+/* 点名手动加分按钮 */
+.btn-roll-award {
+    margin-top: 12px;
+    width: 100%;
+    font-size: 15px;
+    padding: 9px 0;
+    border-radius: 8px;
+}
+.btn-roll-award.hidden { display: none; }
+.btn-roll-award:disabled {
+    opacity: 0.65;
+    cursor: default;
+    background: #e5e7eb;
+    color: #6b7280;
+}
+
 .rollcall-options {
     display: flex;
     flex-direction: column;
