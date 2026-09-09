@@ -2249,11 +2249,16 @@ if (_attTableContainer && !_attTableContainer._selectBound) {
 // cell 5 状态菜单
 const _attCellMenu = $('attendanceCellMenu');
 if (_attCellMenu && !_attCellMenu._menuBound) {
+    // 在菜单内 click 全部拦下，不冒泡到 document 触发「点外部关闭 note 弹窗」
     _attCellMenu.addEventListener('click', (e) => {
         const item = e.target.closest('.att-cell-menu-item');
         if (!item) return;
+        e.stopPropagation();
+        e.preventDefault();
         applyAttendanceCellMenu(item.dataset.status);
     });
+    // mousedown 也拦一份，防止 document 上有 mousedown 监听抢逻辑
+    _attCellMenu.addEventListener('mousedown', (e) => e.stopPropagation());
     _attCellMenu._menuBound = true;
 }
 document.addEventListener('click', (e) => {
