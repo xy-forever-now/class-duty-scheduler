@@ -2124,6 +2124,62 @@ body {
 }
 .login-gate-status.is-ok { color: #059669; }
 .login-gate-status.is-info { color: #2563eb; }
+.login-gate-admin {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed #e5e7eb;
+}
+.login-gate-admin > summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: #4b5563;
+    user-select: none;
+    list-style: none;
+    padding: 4px 0;
+}
+.login-gate-admin > summary::-webkit-details-marker { display: none; }
+.login-gate-admin > summary::before {
+    content: '▸ ';
+    color: #6b7280;
+    transition: transform 0.15s;
+    display: inline-block;
+}
+.login-gate-admin[open] > summary::before { content: '▾ '; }
+.login-gate-admin > summary:hover { color: #1f2937; }
+.login-gate-admin-body {
+    margin-top: 10px;
+    padding: 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+}
+.login-gate-admin-note {
+    font-size: 11px;
+    color: #6b7280;
+    line-height: 1.6;
+    margin-bottom: 10px;
+}
+.login-gate-admin-body .login-gate-field { margin-bottom: 8px; }
+.login-gate-admin-body .login-gate-field input {
+    width: 100%;
+    padding: 6px 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 4px;
+    font-size: 12px;
+    box-sizing: border-box;
+    background: white;
+    color: #1f2937;
+}
+.login-gate-admin-body .login-gate-field input:focus {
+    outline: none;
+    border-color: #4f46e5;
+}
+.login-gate-admin-body #loginGateSaveConfig {
+    width: 100%;
+    margin-top: 6px;
+    padding: 8px;
+    font-size: 13px;
+}
 .login-gate-hint {
     margin-top: 6px;
     font-size: 11px;

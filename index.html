@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>班级工作台 - 智能排班系统</title>
-    <link rel="stylesheet" href="style.css?v=20260910-0800">
+    <link rel="stylesheet" href="style.css?v=20260910-0900">
 </head>
 <body>
     <div class="app">
@@ -757,6 +757,22 @@
             </label>
             <button class="btn btn-secondary login-gate-btn-secondary" id="loginGateLocalOnlyOk" disabled>☁️ 仅本地使用</button>
 
+            <details class="login-gate-admin">
+                <summary>⚙️ 管理员配置 Supabase</summary>
+                <div class="login-gate-admin-body">
+                    <div class="login-gate-admin-note">用于首次部署或换浏览器后丢失配置时，填回 Supabase Project URL 和 anon key。保存后即可正常登录。</div>
+                    <div class="login-gate-field">
+                        <label>Project URL</label>
+                        <input type="text" id="loginGateUrl" placeholder="https://xxxx.supabase.co">
+                    </div>
+                    <div class="login-gate-field">
+                        <label>anon key</label>
+                        <input type="password" id="loginGateAnonKey" placeholder="eyJhbGciOi...">
+                    </div>
+                    <button class="btn btn-primary" id="loginGateSaveConfig">💾 保存配置并尝试登录</button>
+                </div>
+            </details>
+
             <div class="login-gate-status" id="loginGateStatus"></div>
             <div class="login-gate-hint" id="loginGateHint"></div>
         </div>
@@ -766,6 +782,6 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS SDK（云端 PostgreSQL 持久化，未登录/离线时自动降级到 localStorage） -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260910-0800"></script>
+    <script src="app.js?v=20260910-0900"></script>
 </body>
 </html>

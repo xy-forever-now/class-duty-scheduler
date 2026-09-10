@@ -1,5 +1,5 @@
 /**
- * 班级工作台 - 智能排班系统 v20260910-0800
+ * 班级工作台 - 智能排班系统 v20260910-0900
  * 主要功能：
  * 1. Excel导入解析（识别姓名、性别）
  * 2. 智能排班算法（轮空+下周优先）
@@ -352,6 +352,11 @@ function openLoginGate(hint) {
     if (hintEl) hintEl.textContent = hint || '';
     // 同步本地按钮可用性
     refreshLoginGateLocalBtn();
+    // 同步管理员配置框（回填已有 URL/anon key，方便丢失时复用）
+    refreshLoginGateConfigInputs();
+    // 强制打开 details（未配置时吸引用户注意）
+    const admin = document.querySelector('.login-gate-admin');
+    if (admin && !getSupabaseConfig()) admin.setAttribute('open', '');
     // 自动聚焦邮箱框（未配置时不要聚焦）
     if (getSupabaseConfig()) {
         setTimeout(() => $('loginGateEmail')?.focus(), 50);
@@ -481,6 +486,47 @@ async function submitLoginGate() {
         const cur = document.querySelector('.page:not(.hidden)')?.dataset.page;
         if (!cur || cur === 'placeholder') switchPage('duty');
     }, 300);
+}
+
+// 登录遮罩：管理员保存 Supabase 配置（首次部署/换浏览器/丢失配置时用）
+function submitLoginGateSaveConfig() {
+    const urlEl = $('loginGateUrl');
+    const keyEl = $('loginGateAnonKey');
+    const url = (urlEl?.value || '').trim();
+    const anonKey = (keyEl?.value || '').trim();
+    if (!/^https?:\/\/[^\s]+/i.test(url)) {
+        setLoginGateStatus('Project URL 不合法，应以 https:// 开头', '');
+        urlEl?.focus();
+        return;
+    }
+    if (anonKey.length < 20) {
+        setLoginGateStatus('anon key 不合法（JWT 通常很长）', '');
+        keyEl?.focus();
+        return;
+    }
+    setSupabaseConfig(url, anonKey);
+    // 重新初始化客户端（旧的 supabaseClient 是用旧/空配置建的，必须重建）
+    supabaseClient = null;
+    supabaseUser = null;
+    initSupabase();
+    setLoginGateStatus('已保存，正在尝试登录…', 'is-info');
+    // 立即触发登录
+    submitLoginGate();
+}
+// 打开遮罩时回填已有配置（避免重复输入）
+function refreshLoginGateConfigInputs() {
+    const cfg = getSupabaseConfig();
+    const urlEl = $('loginGateUrl');
+    const keyEl = $('loginGateAnonKey');
+    if (!urlEl || !keyEl) return;
+    if (cfg) {
+        urlEl.value = cfg.url;
+        keyEl.value = cfg.anonKey;
+    } else {
+        // 仅当字段为空时才清空（避免覆盖用户已填的内容）
+        if (!urlEl.value) urlEl.value = '';
+        if (!keyEl.value) keyEl.value = '';
+    }
 }
 
 // 登录遮罩：点击"仅本地使用"按钮
@@ -3562,6 +3608,11 @@ document.addEventListener('click', (e) => {
     });
     $('loginGateEmail')?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') $('loginGatePassword')?.focus();
+    });
+    // 管理员保存配置
+    $('loginGateSaveConfig')?.addEventListener('click', submitLoginGateSaveConfig);
+    $('loginGateAnonKey')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitLoginGateSaveConfig();
     });
 
     // ===== 侧边栏登录按钮 =====
