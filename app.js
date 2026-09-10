@@ -1,5 +1,5 @@
 /**
- * 班级工作台 - 智能排班系统 v20260909-2320
+ * 班级工作台 - 智能排班系统 v20260910-0220
  * 主要功能：
  * 1. Excel导入解析（识别姓名、性别）
  * 2. 智能排班算法（轮空+下周优先）
@@ -278,16 +278,34 @@ function setVisible(id, show) {
 // 启动时刷新一次状态条
 function refreshCloudStatus() {
     // 顶部状态条（精简版）
+    const userEl = $('cloudStatusUser');
+    const logoutBtn = $('cloudStatusLogout');
+    const goSettings = $('cloudStatusGoSettings');
     if (localOnlyMode()) {
         updateCloudStatus('is-local-only', '云端状态：仅本地存储');
+        if (userEl) { userEl.hidden = true; userEl.textContent = ''; }
+        if (logoutBtn) logoutBtn.classList.add('hidden');
+        if (goSettings) goSettings.style.display = '';
     } else if (!getSupabaseConfig()) {
         updateCloudStatus('is-no-config', '云端状态：未配置');
+        if (userEl) { userEl.hidden = true; userEl.textContent = ''; }
+        if (logoutBtn) logoutBtn.classList.add('hidden');
+        if (goSettings) goSettings.style.display = '';
     } else if (!supabaseClient) {
         updateCloudStatus('is-error', '云端状态：客户端初始化失败');
+        if (userEl) { userEl.hidden = true; userEl.textContent = ''; }
+        if (logoutBtn) logoutBtn.classList.add('hidden');
+        if (goSettings) goSettings.style.display = '';
     } else if (supabaseUser) {
-        updateCloudStatus('is-online', `云端状态：已登录 ${supabaseUser.email || ''}`);
+        updateCloudStatus('is-online', '云端状态：已登录');
+        if (userEl) { userEl.hidden = false; userEl.textContent = supabaseUser.email || ''; }
+        if (logoutBtn) logoutBtn.classList.remove('hidden');
+        if (goSettings) goSettings.style.display = 'none';
     } else {
         updateCloudStatus('is-offline', '云端状态：未登录');
+        if (userEl) { userEl.hidden = true; userEl.textContent = ''; }
+        if (logoutBtn) logoutBtn.classList.add('hidden');
+        if (goSettings) goSettings.style.display = '';
     }
     // 同步设置页状态（如果设置页 DOM 已加载）
     refreshSettingsStatus();
@@ -481,7 +499,7 @@ function refreshSettingsStatus() {
     const line = $('settingsCloudStatus');
     const btnPull = $('settingsCloudPull');
     const btnPush = $('settingsCloudPush');
-    const btnLogout = $('settingsLogout');
+    const loginBlock = $('settingsLoginBlock');
     const cbLocalOnly = $('settingsLocalOnly');
     const inputUrl = $('settingsSupabaseUrl');
     const inputKey = $('settingsSupabaseKey');
@@ -492,6 +510,11 @@ function refreshSettingsStatus() {
     const cfg = getSupabaseConfig();
     if (inputUrl && cfg) inputUrl.value = cfg.url;
     if (inputKey && cfg) inputKey.value = cfg.anonKey;
+
+    // 已登录时整块登录表单隐藏（顶部状态条已有"退出登录"按钮）
+    if (loginBlock) {
+        loginBlock.style.display = supabaseUser ? 'none' : '';
+    }
 
     let cls = '', text = '云端状态：检测中…';
     if (localOnlyMode()) {
@@ -505,7 +528,7 @@ function refreshSettingsStatus() {
         text = '云端状态：Supabase 客户端初始化失败';
     } else if (supabaseUser) {
         cls = 'is-online';
-        text = `云端状态：已登录 ${supabaseUser.email || ''}，自动实时同步中`;
+        text = `云端状态：已登录 ${supabaseUser.email || ''}，自动实时同步中（顶部"退出登录"可登出）`;
     } else {
         cls = 'is-offline';
         text = '云端状态：未登录，填入邮箱和密码后点登录';
@@ -515,7 +538,6 @@ function refreshSettingsStatus() {
 
     if (btnPull) btnPull.disabled = !cloudReady();
     if (btnPush) btnPush.disabled = !cloudReady();
-    if (btnLogout) btnLogout.disabled = !supabaseUser;
 }
 
 // 设置页：保存 Supabase 配置
@@ -578,13 +600,12 @@ async function settingsLogin() {
     syncFromSupabase();
 }
 
-// 设置页：退出登录
-async function settingsLogout() {
+// 退出云端登录（顶部状态条按钮调用）
+async function logoutFromCloud() {
     if (!supabaseClient || !supabaseUser) return;
     try { await supabaseClient.auth.signOut(); } catch (err) { /* ignore */ }
     supabaseUser = null;
     showToast('已退出云端登录（云端数据保留）', 'info');
-    refreshSettingsStatus();
     refreshCloudStatus();
 }
 
@@ -646,7 +667,7 @@ function bindSettingsPage() {
     $('settingsCloudSave')?.addEventListener('click', settingsSaveCloudConfig);
     $('settingsCloudClear')?.addEventListener('click', settingsClearCloudConfig);
     $('settingsLoginOk')?.addEventListener('click', settingsLogin);
-    $('settingsLogout')?.addEventListener('click', settingsLogout);
+    $('cloudStatusLogout')?.addEventListener('click', logoutFromCloud);
     $('settingsCloudPull')?.addEventListener('click', () => manualPullFromCloud());
     $('settingsCloudPush')?.addEventListener('click', () => manualPushToCloud());
 

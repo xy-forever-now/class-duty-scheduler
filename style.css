@@ -1184,6 +1184,25 @@ body {
     border-radius: 4px;
 }
 .cloud-status-link:hover { background: #eff6ff; }
+.cloud-status-user {
+    font-size: 12px;
+    color: #059669;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.cloud-status-logout {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s;
+}
+.cloud-status-logout:hover { background: #fecaca; }
+.cloud-status-logout.hidden { display: none; }
 
 /* ===== 系统设置页面 ===== */
 .settings-card {

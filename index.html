@@ -100,6 +100,8 @@
                     <div class="cloud-status-bar" id="cloudStatusBar">
                         <span class="cloud-status-icon" id="cloudStatusIcon">☁️</span>
                         <span class="cloud-status-text" id="cloudStatusText">云端状态：检测中…</span>
+                        <span class="cloud-status-user" id="cloudStatusUser" hidden></span>
+                        <button class="cloud-status-logout hidden" id="cloudStatusLogout" title="退出云端登录">退出登录</button>
                         <a class="cloud-status-link" href="#" id="cloudStatusGoSettings">→ 系统设置</a>
                     </div>
                 </div>
@@ -614,17 +616,18 @@
 
                         <div class="settings-divider"></div>
 
-                        <div class="settings-row">
-                            <label>邮箱</label>
-                            <input type="email" id="settingsLoginEmail" placeholder="teacher@example.com">
-                        </div>
-                        <div class="settings-row">
-                            <label>密码</label>
-                            <input type="password" id="settingsLoginPassword" placeholder="≥6 位">
-                        </div>
-                        <div class="settings-actions">
-                            <button class="btn btn-secondary" id="settingsLogout" disabled>退出登录</button>
-                            <button class="btn btn-success" id="settingsLoginOk">登录 / 注册</button>
+                        <div id="settingsLoginBlock">
+                            <div class="settings-row">
+                                <label>邮箱</label>
+                                <input type="email" id="settingsLoginEmail" placeholder="teacher@example.com">
+                            </div>
+                            <div class="settings-row">
+                                <label>密码</label>
+                                <input type="password" id="settingsLoginPassword" placeholder="≥6 位">
+                            </div>
+                            <div class="settings-actions">
+                                <button class="btn btn-success" id="settingsLoginOk">登录 / 注册</button>
+                            </div>
                         </div>
 
                         <div class="settings-divider"></div>
