@@ -277,41 +277,20 @@ function setVisible(id, show) {
 
 // 启动时刷新一次状态条
 function refreshCloudStatus() {
+    // 顶部状态条（精简版）
     if (localOnlyMode()) {
-        updateCloudStatus('is-local-only', '云端状态：仅本地存储（已关闭云端同步）');
-        setVisible('btnCloudLogin', false);
-        setVisible('btnCloudLogout', false);
-        setVisible('btnCloudSync', false);
-        setVisible('btnCloudPush', false);
-        return;
-    }
-    const cfg = getSupabaseConfig();
-    if (!cfg) {
-        updateCloudStatus('is-no-config', '云端状态：未配置 Supabase（点右上角"重新配置"）');
-        setVisible('btnCloudLogin', false);
-        setVisible('btnCloudLogout', false);
-        setVisible('btnCloudSync', false);
-        setVisible('btnCloudPush', false);
-        return;
-    }
-    if (!supabaseClient) {
-        updateCloudStatus('is-error', '云端状态：Supabase 客户端初始化失败');
-        return;
-    }
-    if (supabaseUser) {
-        const email = supabaseUser.email || '(匿名)';
-        updateCloudStatus('is-online', `云端状态：已登录 ${email}，自动实时同步中`);
-        setVisible('btnCloudLogin', false);
-        setVisible('btnCloudLogout', true);
-        setVisible('btnCloudSync', true);
-        setVisible('btnCloudPush', true);
+        updateCloudStatus('is-local-only', '云端状态：仅本地存储');
+    } else if (!getSupabaseConfig()) {
+        updateCloudStatus('is-no-config', '云端状态：未配置');
+    } else if (!supabaseClient) {
+        updateCloudStatus('is-error', '云端状态：客户端初始化失败');
+    } else if (supabaseUser) {
+        updateCloudStatus('is-online', `云端状态：已登录 ${supabaseUser.email || ''}`);
     } else {
-        updateCloudStatus('is-offline', '云端状态：未登录（点"登录云端"开启同步）');
-        setVisible('btnCloudLogin', true);
-        setVisible('btnCloudLogout', false);
-        setVisible('btnCloudSync', false);
-        setVisible('btnCloudPush', false);
+        updateCloudStatus('is-offline', '云端状态：未登录');
     }
+    // 同步设置页状态（如果设置页 DOM 已加载）
+    refreshSettingsStatus();
 }
 
 // 手动从云端拉取覆盖本地
@@ -485,10 +464,227 @@ function maybePromptCloud() {
             '检测到您尚未登录 Supabase。当前数据仅保存在本机浏览器，' +
             '清理浏览器缓存或更换设备将导致数据丢失。\n\n' +
             '点击「确定」打开登录窗口；\n' +
-            '点击「取消」保持本地模式（之后可在顶部"☁️ 登录云端"按钮登录或勾选"仅本地存储"）。'
+            '点击「取消」保持本地模式（之后可在左侧"🔧 系统设置"里登录或勾选"仅本地存储"）。'
         );
-        if (choice) openLoginDialog();
+        if (choice) {
+            // 跳到设置页并聚焦邮箱输入框
+            switchPage('settings');
+            setTimeout(() => $('settingsLoginEmail')?.focus(), 200);
+        }
     }, 800);
+}
+
+// ===== 系统设置页 =====
+
+// 同步设置页状态（设置页 DOM 可能未渲染，因此做空值保护）
+function refreshSettingsStatus() {
+    const line = $('settingsCloudStatus');
+    const btnPull = $('settingsCloudPull');
+    const btnPush = $('settingsCloudPush');
+    const btnLogout = $('settingsLogout');
+    const cbLocalOnly = $('settingsLocalOnly');
+    const inputUrl = $('settingsSupabaseUrl');
+    const inputKey = $('settingsSupabaseKey');
+    if (!line) return;
+
+    if (cbLocalOnly) cbLocalOnly.checked = localOnlyMode();
+
+    const cfg = getSupabaseConfig();
+    if (inputUrl && cfg) inputUrl.value = cfg.url;
+    if (inputKey && cfg) inputKey.value = cfg.anonKey;
+
+    let cls = '', text = '云端状态：检测中…';
+    if (localOnlyMode()) {
+        cls = 'is-local-only';
+        text = '云端状态：仅本地存储（已关闭云端同步）';
+    } else if (!cfg) {
+        cls = 'is-no-config';
+        text = '云端状态：未配置 Supabase，请填入 Project URL 和 anon key';
+    } else if (!supabaseClient) {
+        cls = 'is-error';
+        text = '云端状态：Supabase 客户端初始化失败';
+    } else if (supabaseUser) {
+        cls = 'is-online';
+        text = `云端状态：已登录 ${supabaseUser.email || ''}，自动实时同步中`;
+    } else {
+        cls = 'is-offline';
+        text = '云端状态：未登录，填入邮箱和密码后点登录';
+    }
+    line.className = 'settings-status-line ' + cls;
+    line.textContent = text;
+
+    if (btnPull) btnPull.disabled = !cloudReady();
+    if (btnPush) btnPush.disabled = !cloudReady();
+    if (btnLogout) btnLogout.disabled = !supabaseUser;
+}
+
+// 设置页：保存 Supabase 配置
+function settingsSaveCloudConfig() {
+    const url = ($('settingsSupabaseUrl').value || '').trim();
+    const key = ($('settingsSupabaseKey').value || '').trim();
+    if (!/^https?:\/\/[^\s]+$/.test(url)) { showToast('URL 格式不正确', 'warning'); return; }
+    if (key.length < 20) { showToast('anon key 太短，请检查是否复制完整', 'warning'); return; }
+    setSupabaseConfig(url, key);
+    showToast('Supabase 配置已保存', 'success');
+    initSupabase();
+    refreshSettingsStatus();
+    refreshCloudStatus();
+}
+
+// 设置页：清除配置
+function settingsClearCloudConfig() {
+    if (!confirm('确定清除 Supabase 配置吗？\n（不影响云端已保存的数据）')) return;
+    clearSupabaseConfig();
+    $('settingsSupabaseUrl').value = '';
+    $('settingsSupabaseKey').value = '';
+    // 顺便退出登录
+    if (supabaseClient && supabaseUser) {
+        supabaseClient.auth.signOut().catch(() => {});
+    }
+    supabaseClient = null;
+    supabaseUser = null;
+    showToast('已清除 Supabase 配置', 'info');
+    refreshSettingsStatus();
+    refreshCloudStatus();
+}
+
+// 设置页：登录/注册
+async function settingsLogin() {
+    const email = ($('settingsLoginEmail').value || '').trim();
+    const pwd = $('settingsLoginPassword').value || '';
+    if (!getSupabaseConfig()) { showToast('请先保存 Supabase 配置', 'warning'); return; }
+    if (!email || !pwd) { showToast('请填写邮箱和密码', 'warning'); return; }
+    if (pwd.length < 6) { showToast('密码至少 6 位', 'warning'); return; }
+    if (!supabaseClient) initSupabase();
+    if (!supabaseClient) { showToast('Supabase 客户端未就绪', 'error'); return; }
+
+    let result = await supabaseClient.auth.signInWithPassword({ email, password: pwd });
+    if (result.error) {
+        const r2 = await supabaseClient.auth.signUp({ email, password: pwd });
+        if (r2.error) { showToast('登录/注册失败：' + r2.error.message, 'error'); refreshSettingsStatus(); return; }
+        if (r2.data && r2.data.session && r2.data.session.user) {
+            supabaseUser = r2.data.session.user;
+        } else {
+            showToast('注册成功，请去邮箱点击确认链接后再登录（如已关闭邮箱确认请忽略）', 'warning');
+            refreshSettingsStatus();
+            return;
+        }
+    } else {
+        supabaseUser = result.data.session.user;
+    }
+    showToast('登录成功：' + supabaseUser.email, 'success');
+    refreshSettingsStatus();
+    refreshCloudStatus();
+    syncFromSupabase();
+}
+
+// 设置页：退出登录
+async function settingsLogout() {
+    if (!supabaseClient || !supabaseUser) return;
+    try { await supabaseClient.auth.signOut(); } catch (err) { /* ignore */ }
+    supabaseUser = null;
+    showToast('已退出云端登录（云端数据保留）', 'info');
+    refreshSettingsStatus();
+    refreshCloudStatus();
+}
+
+// 设置页：JSON 备份导出
+function settingsExportJson() {
+    const data = loadState() || {};
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    a.href = url;
+    a.download = `class-workbench-backup-${ts}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('已导出 JSON 备份', 'success');
+}
+
+// 设置页：从 JSON 恢复
+function settingsImportJson(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const data = JSON.parse(String(e.target.result || ''));
+            if (!data || typeof data !== 'object') throw new Error('文件内容不是对象');
+            if (!confirm('从备份恢复会覆盖当前所有数据，确定继续？')) return;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            showToast('恢复成功，刷新页面查看', 'success');
+            setTimeout(() => location.reload(), 1200);
+        } catch (err) {
+            showToast('恢复失败：' + err.message, 'error');
+        }
+    };
+    reader.readAsText(file);
+}
+
+// 设置页：清空本地数据
+function settingsResetAll() {
+    if (!confirm('确定清空全部本地数据？此操作不可撤销。')) return;
+    if (!confirm('再次确认：所有学生 / 值班 / 座位 / 考勤 / 积分都会丢失。继续？')) return;
+    clearStoredState();
+    // 同时清掉除 config 外的所有 workbench 键
+    try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('class-workbench') && k !== STORAGE_KEY && k !== LOCAL_ONLY_KEY && k !== SUPABASE_CONFIG_KEY && !k.endsWith('.supabaseSession')) {
+                localStorage.removeItem(k);
+            }
+        }
+    } catch (err) { /* ignore */ }
+    showToast('已清空全部本地数据，刷新页面', 'success');
+    setTimeout(() => location.reload(), 1200);
+}
+
+// 绑定设置页所有事件
+function bindSettingsPage() {
+    $('settingsCloudSave')?.addEventListener('click', settingsSaveCloudConfig);
+    $('settingsCloudClear')?.addEventListener('click', settingsClearCloudConfig);
+    $('settingsLoginOk')?.addEventListener('click', settingsLogin);
+    $('settingsLogout')?.addEventListener('click', settingsLogout);
+    $('settingsCloudPull')?.addEventListener('click', () => manualPullFromCloud());
+    $('settingsCloudPush')?.addEventListener('click', () => manualPushToCloud());
+
+    const cbLocalOnly = $('settingsLocalOnly');
+    if (cbLocalOnly) {
+        cbLocalOnly.addEventListener('change', () => {
+            setLocalOnlyMode(cbLocalOnly.checked);
+            refreshCloudStatus();
+            if (cbLocalOnly.checked) showToast('已切换为仅本地存储', 'info');
+            else { refreshSettingsStatus(); syncFromSupabase(); }
+        });
+    }
+
+    $('settingsExportJson')?.addEventListener('click', settingsExportJson);
+    $('settingsImportJsonBtn')?.addEventListener('click', () => $('settingsImportJson').click());
+    $('settingsImportJson')?.addEventListener('change', (e) => {
+        const f = e.target.files && e.target.files[0];
+        settingsImportJson(f);
+        e.target.value = '';
+    });
+    $('settingsResetAll')?.addEventListener('click', settingsResetAll);
+}
+
+// 切页（如果路由系统已存在就复用；否则用最简实现兜底）
+function switchPage(pageName) {
+    // 先尝试触发已有的菜单点击
+    const nav = document.querySelector(`.nav-item[data-page="${pageName}"]`);
+    if (nav && !nav.classList.contains('disabled')) {
+        nav.click();
+        return;
+    }
+    // 兜底：手动切 class
+    document.querySelectorAll('.page').forEach(p => {
+        p.classList.toggle('hidden', p.dataset.page !== pageName);
+    });
+    document.querySelectorAll('.nav-item').forEach(n => {
+        n.classList.toggle('active', n.dataset.page === pageName);
+    });
 }
 
 // ===== 菜单路由 =====
@@ -2911,17 +3107,14 @@ document.addEventListener('click', (e) => {
     refreshCloudStatus();
     maybePromptCloud();
 
-    // 绑定云端同步按钮和"仅本地"勾选
-    const btnLogin = $('btnCloudLogin');
-    if (btnLogin) btnLogin.addEventListener('click', openLoginDialog);
-    const btnLogout = $('btnCloudLogout');
-    if (btnLogout) btnLogout.addEventListener('click', doLogout);
-    const btnSync = $('btnCloudSync');
-    if (btnSync) btnSync.addEventListener('click', manualPullFromCloud);
-    const btnPush = $('btnCloudPush');
-    if (btnPush) btnPush.addEventListener('click', manualPushToCloud);
-    const btnConfig = $('btnCloudConfig');
-    if (btnConfig) btnConfig.addEventListener('click', openConfigDialog);
+    // 顶部"→ 系统设置"链接
+    const goSettings = $('cloudStatusGoSettings');
+    if (goSettings) {
+        goSettings.addEventListener('click', (e) => {
+            e.preventDefault();
+            switchPage('settings');
+        });
+    }
 
     // 配置对话框
     $('supabaseConfigCancel')?.addEventListener('click', closeConfigDialog);
@@ -2931,19 +3124,6 @@ document.addEventListener('click', (e) => {
     $('supabaseLoginCancel')?.addEventListener('click', closeLoginDialog);
     $('supabaseLoginOk')?.addEventListener('click', submitLoginDialog);
 
-    const cbLocalOnly = $('cloudLocalOnly');
-    if (cbLocalOnly) {
-        cbLocalOnly.checked = localOnlyMode();
-        cbLocalOnly.addEventListener('change', () => {
-            setLocalOnlyMode(cbLocalOnly.checked);
-            refreshCloudStatus();
-            if (!cbLocalOnly.checked) {
-                // 取消勾选：重新提示登录 + 拉一次云端
-                maybePromptCloud();
-                syncFromSupabase();
-            } else {
-                showToast('已切换为仅本地存储（云端将停止同步）', 'info');
-            }
-        });
-    }
+    // 系统设置页：云端配置
+    bindSettingsPage();
 })();

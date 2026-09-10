@@ -47,10 +47,9 @@
                     <span class="nav-badge">即将上线</span>
                 </li>
                 <li class="nav-divider"></li>
-                <li class="nav-item disabled" data-page="settings">
+                <li class="nav-item" data-page="settings">
                     <span class="nav-icon">🔧</span>
                     <span class="nav-text">系统设置</span>
-                    <span class="nav-badge">即将上线</span>
                 </li>
             </ul>
 
@@ -102,19 +101,12 @@
 
             <!-- 主内容区 -->
             <main class="main">
-                <!-- ===== 全局：云端同步工具栏（所有页面可见） ===== -->
+                <!-- ===== 全局：云端状态条（所有页面可见，详细控制请进系统设置） ===== -->
                 <div class="cloud-toolbar">
-                    <button class="btn btn-secondary" id="btnCloudLogin" title="登录或注册 Supabase 账号">☁️ 登录云端</button>
-                    <button class="btn btn-secondary hidden" id="btnCloudLogout" title="退出当前云端账号">退出登录</button>
-                    <button class="btn btn-secondary hidden" id="btnCloudSync" title="从云端拉取最新数据并覆盖本地">↓ 从云端拉取</button>
-                    <button class="btn btn-secondary hidden" id="btnCloudPush" title="把当前本地数据推送到云端">↑ 上传到云端</button>
-                    <button class="btn btn-secondary" id="btnCloudConfig" title="配置 Supabase 项目 URL 与 anon key">⚙️ 重新配置</button>
                     <div class="cloud-status-bar" id="cloudStatusBar">
                         <span class="cloud-status-icon" id="cloudStatusIcon">☁️</span>
                         <span class="cloud-status-text" id="cloudStatusText">云端状态：检测中…</span>
-                        <label class="cloud-status-local-only" title="勾选后所有数据仅保存在本地浏览器，不上传云端">
-                            <input type="checkbox" id="cloudLocalOnly"> 仅本地存储（不走云端）
-                        </label>
+                        <a class="cloud-status-link" href="#" id="cloudStatusGoSettings">→ 系统设置</a>
                     </div>
                 </div>
 
@@ -592,6 +584,83 @@
                         <div class="score-detail-source-summary" id="scoreDetailSourceSummary"></div>
                         <div class="score-detail-list" id="scoreDetailList"></div>
                         <div class="score-detail-footer" id="scoreDetailFooter">—</div>
+                    </div>
+                </section>
+
+                <!-- =============== 系统设置页面 =============== -->
+                <section class="page hidden" data-page="settings">
+                    <div class="content-header-bar">
+                        <h2>🔧 系统设置</h2>
+                    </div>
+
+                    <!-- 云端存储配置 -->
+                    <div class="settings-card">
+                        <div class="settings-card-title">☁️ 云端存储（Supabase）</div>
+                        <div class="settings-card-desc">把你的业务数据（学生 / 值班 / 座位 / 考勤 / 积分）同步到云端，多设备共享、换浏览器不丢数据。</div>
+
+                        <div class="settings-row">
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settingsLocalOnly">
+                                <span>仅本地存储（关闭云端同步）</span>
+                            </label>
+                        </div>
+
+                        <div class="settings-row">
+                            <label>Project URL</label>
+                            <input type="text" id="settingsSupabaseUrl" placeholder="https://xxxxx.supabase.co">
+                        </div>
+                        <div class="settings-row">
+                            <label>anon key</label>
+                            <input type="password" id="settingsSupabaseKey" placeholder="eyJhbGciOi...">
+                        </div>
+                        <div class="settings-actions">
+                            <button class="btn btn-secondary" id="settingsCloudClear">清除配置</button>
+                            <button class="btn btn-primary" id="settingsCloudSave">保存配置</button>
+                        </div>
+
+                        <div class="settings-divider"></div>
+
+                        <div class="settings-row">
+                            <label>邮箱</label>
+                            <input type="email" id="settingsLoginEmail" placeholder="teacher@example.com">
+                        </div>
+                        <div class="settings-row">
+                            <label>密码</label>
+                            <input type="password" id="settingsLoginPassword" placeholder="≥6 位">
+                        </div>
+                        <div class="settings-actions">
+                            <button class="btn btn-secondary" id="settingsLogout" disabled>退出登录</button>
+                            <button class="btn btn-success" id="settingsLoginOk">登录 / 注册</button>
+                        </div>
+
+                        <div class="settings-divider"></div>
+
+                        <div class="settings-actions">
+                            <button class="btn btn-secondary" id="settingsCloudPull" disabled>↓ 从云端拉取</button>
+                            <button class="btn btn-secondary" id="settingsCloudPush" disabled>↑ 上传到云端</button>
+                        </div>
+
+                        <div class="settings-status-line" id="settingsCloudStatus">云端状态：检测中…</div>
+                    </div>
+
+                    <!-- 数据导入导出 -->
+                    <div class="settings-card">
+                        <div class="settings-card-title">💾 数据备份</div>
+                        <div class="settings-card-desc">把本地所有数据导出为 JSON 文件保存；或从备份文件恢复（会覆盖当前所有数据）。</div>
+                        <div class="settings-actions">
+                            <button class="btn btn-secondary" id="settingsExportJson">📤 导出 JSON 备份</button>
+                            <button class="btn btn-secondary" id="settingsImportJsonBtn">📥 从 JSON 恢复</button>
+                            <input type="file" id="settingsImportJson" accept="application/json" style="display:none;">
+                        </div>
+                    </div>
+
+                    <!-- 危险操作 -->
+                    <div class="settings-card settings-card-danger">
+                        <div class="settings-card-title">⚠️ 危险操作</div>
+                        <div class="settings-card-desc">以下操作不可撤销，请谨慎。</div>
+                        <div class="settings-actions">
+                            <button class="btn btn-danger" id="settingsResetAll">🗑️ 清空全部本地数据</button>
+                        </div>
                     </div>
                 </section>
 
