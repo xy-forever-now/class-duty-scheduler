@@ -640,6 +640,28 @@
                         <div class="settings-status-line" id="settingsCloudStatus">云端状态：检测中…</div>
                     </div>
 
+                    <!-- 云端账号登录（独立卡，对所有人可见；让"仅本地"用户也能切回云端） -->
+                    <div class="settings-card" data-card="account">
+                        <div class="settings-card-title">☁️ 云端账号登录</div>
+                        <div class="settings-card-desc">已登录云端时自动同步到 Supabase；如当前是「仅本地存储」，可在此切换回云端登录。Project URL 与 anon key 仅管理员可改。</div>
+
+                        <div class="settings-row">
+                            <label>邮箱</label>
+                            <input type="email" id="settingsAccountEmail" placeholder="teacher@example.com" autocomplete="username">
+                        </div>
+                        <div class="settings-row">
+                            <label>密码</label>
+                            <input type="password" id="settingsAccountPassword" placeholder="≥6 位" autocomplete="current-password">
+                        </div>
+                        <div class="settings-actions">
+                            <button class="btn btn-success" id="settingsAccountLogin">登录 / 注册</button>
+                            <button class="btn btn-secondary" id="settingsAccountLogout" hidden>退出登录</button>
+                            <button class="btn btn-secondary" id="settingsAccountLocalOnly">☁️ 仅本地存储</button>
+                        </div>
+
+                        <div class="settings-status-line" id="settingsAccountStatus">云端账号：检测中…</div>
+                    </div>
+
                     <!-- 数据导入导出 -->
                     <div class="settings-card">
                         <div class="settings-card-title">💾 数据备份</div>
