@@ -6,7 +6,7 @@
  * 3. 多页面菜单（值班表含排班配置 / 座位表 / 学生管理 / 随机点名）
  * 4. 座位表随机排座（完全随机 / 男女穿插 / 男女分区）
  * 5. 随机点名转盘
- * 6. Puter.js 云端 KV + localStorage 双重持久化（学生/值班表/座位表/点名历史/排班配置）
+ * 6. Supabase 云端 PostgreSQL + localStorage 双重持久化（学生/值班表/座位表/点名历史/排班配置）
  */
 
 // ===== 全局状态 =====
@@ -53,23 +53,77 @@ function showToast(msg, type = 'success') {
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-// ===== 本地缓存（localStorage + Puter.js 云端 KV 双重持久化） =====
+// ===== 本地缓存（localStorage + Supabase 云端双重持久化） =====
 const STORAGE_KEY = 'class-workbench.v1';
-const PUTER_KEY = 'class-workbench:v1:snapshot'; // Puter KV 上的键名
-const LOCAL_ONLY_KEY = 'class-workbench.v1.localOnly'; // 用户勾选"仅本地"时持久化
+const LOCAL_ONLY_KEY = 'class-workbench.v1.localOnly';
+const SUPABASE_CONFIG_KEY = 'class-workbench.v1.supabaseConfig'; // { url, anonKey }
 
-// 是否就绪：window.puter 存在 + puter.kv 存在 + 用户已登录 + 未勾选"仅本地"
-function puterReady() {
-    if (localOnlyMode()) return false;
-    if (typeof window === 'undefined') return false;
-    const p = window.puter;
-    if (!p || !p.kv || typeof p.kv.get !== 'function') return false;
-    // 未登录时调用 set/get 可能 throw；这里用 try 静默探测
+// 当前 Supabase 客户端与 session（在 init 后或登录后填充）
+let supabaseClient = null;
+let supabaseUser = null;
+
+// 读取 URL/anon key 配置
+function getSupabaseConfig() {
     try {
-        return p.auth && typeof p.auth.isSignedIn === 'function' ? p.auth.isSignedIn() === true : true;
+        const raw = localStorage.getItem(SUPABASE_CONFIG_KEY);
+        if (!raw) return null;
+        const obj = JSON.parse(raw);
+        if (!obj || typeof obj.url !== 'string' || typeof obj.anonKey !== 'string') return null;
+        if (!/^https?:\/\//.test(obj.url)) return null;
+        if (obj.anonKey.length < 20) return null;
+        return { url: obj.url.replace(/\/$/, ''), anonKey: obj.anonKey };
     } catch (err) {
+        return null;
+    }
+}
+
+function setSupabaseConfig(url, anonKey) {
+    try {
+        localStorage.setItem(SUPABASE_CONFIG_KEY, JSON.stringify({ url, anonKey }));
+    } catch (err) { /* ignore */ }
+}
+
+function clearSupabaseConfig() {
+    try { localStorage.removeItem(SUPABASE_CONFIG_KEY); } catch (err) { /* ignore */ }
+}
+
+// 初始化客户端 + 从 localStorage 恢复 session
+function initSupabase() {
+    const cfg = getSupabaseConfig();
+    if (!cfg || !window.supabase || typeof window.supabase.createClient !== 'function') {
+        supabaseClient = null;
+        supabaseUser = null;
         return false;
     }
+    try {
+        supabaseClient = window.supabase.createClient(cfg.url, cfg.anonKey, {
+            auth: {
+                persistSession: true,
+                autoRefreshToken: true,
+                storageKey: 'class-workbench.v1.supabaseSession',
+            },
+        });
+    } catch (err) {
+        console.warn('[supabase] 创建客户端失败：', err);
+        supabaseClient = null;
+        supabaseUser = null;
+        return false;
+    }
+    // 异步恢复 session
+    supabaseClient.auth.getSession().then(({ data, error }) => {
+        if (error) { console.warn('[supabase] 恢复 session 失败：', error); return; }
+        supabaseUser = data && data.session && data.session.user ? data.session.user : null;
+        refreshCloudStatus();
+        if (supabaseUser) syncFromSupabase();
+    }).catch(err => console.warn('[supabase] getSession 异常：', err));
+    return true;
+}
+
+// 是否就绪：未勾选仅本地 + 客户端存在 + 已登录
+function cloudReady() {
+    if (localOnlyMode()) return false;
+    if (!supabaseClient) return false;
+    return !!supabaseUser;
 }
 
 // 用户是否勾选了"仅本地存储"
@@ -119,10 +173,14 @@ function saveState() {
     }
 
     // 2) 云端异步写：失败仅警告，不影响本地与界面
-    if (puterReady()) {
-        window.puter.kv.set(PUTER_KEY, snapshot).catch(err => {
-            console.warn('[cache] Puter 云端保存失败：', err);
-        });
+    if (cloudReady()) {
+        const userId = supabaseUser.id;
+        supabaseClient.from('snapshots')
+            .upsert({ user_id: userId, payload: snapshot }, { onConflict: 'user_id' })
+            .then(({ error }) => {
+                if (error) console.warn('[cache] Supabase 云端保存失败：', error);
+            })
+            .catch(err => console.warn('[cache] Supabase upsert 异常：', err));
     }
 }
 
@@ -147,35 +205,39 @@ function loadState() {
 }
 
 // 启动后异步尝试从云端拉取；若云端版本更新则覆盖本地
-function syncFromPuter() {
-    if (!puterReady()) return;
-    window.puter.kv.get(PUTER_KEY).then(remote => {
-        if (!remote || typeof remote !== 'object') return;
-        const local = loadState();
-        const remoteTs = typeof remote.savedAt === 'number' ? remote.savedAt : 0;
-        const localTs = local && typeof local.savedAt === 'number' ? local.savedAt : 0;
-        if (remoteTs <= localTs) return; // 本地更新，无需覆盖
-        // 云端更新，覆盖本地并提示用户
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
-            showToast && showToast('已从云端同步最新数据，刷新页面查看', 'success');
-        } catch (err) {
-            console.warn('[cache] 同步云端到本地失败：', err);
-        }
-    }).catch(err => {
-        console.warn('[cache] 读取云端失败：', err);
-        // 读取失败时仅记录，不打扰用户
-    });
+function syncFromSupabase() {
+    if (!cloudReady()) return;
+    const userId = supabaseUser.id;
+    supabaseClient.from('snapshots')
+        .select('payload')
+        .eq('user_id', userId)
+        .maybeSingle()
+        .then(({ data, error }) => {
+            if (error) { console.warn('[cache] 读取云端失败：', error); return; }
+            if (!data || !data.payload || typeof data.payload !== 'object') return;
+            const remote = data.payload;
+            const local = loadState();
+            const remoteTs = typeof remote.savedAt === 'number' ? remote.savedAt : 0;
+            const localTs = local && typeof local.savedAt === 'number' ? local.savedAt : 0;
+            if (remoteTs <= localTs) return; // 本地更新，无需覆盖
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
+                if (typeof showToast === 'function') showToast('已从云端同步最新数据，刷新页面查看', 'success');
+            } catch (err) {
+                console.warn('[cache] 同步云端到本地失败：', err);
+            }
+        })
+        .catch(err => console.warn('[cache] syncFromSupabase 异常：', err));
 }
 
 function clearStoredState() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (err) { /* ignore */ }
-    // 异步清掉云端自有 key（不调用 flush，避免影响用户其他数据）
-    if (puterReady()) {
-        const puter = window.puter;
-        puter.kv.del(PUTER_KEY).catch(err => {
-            console.warn('[cache] 清空 Puter 失败：', err);
-        });
+    // 异步清掉云端该用户的快照行（不影响其他表/其他用户）
+    if (cloudReady()) {
+        const userId = supabaseUser.id;
+        supabaseClient.from('snapshots').delete().eq('user_id', userId)
+            .then(({ error }) => { if (error) console.warn('[cache] 清空云端失败：', error); })
+            .catch(err => console.warn('[cache] delete 异常：', err));
     }
 }
 
@@ -183,175 +245,246 @@ function setStatus(text) {
     $('statusText').textContent = text;
 }
 
-// ===== 云端同步：状态条 / 手动覆盖 / 启动登录 =====
+// ===== 云端同步：状态条 / 登录 / 拉取 / 上传 =====
 
 function updateCloudStatus(state, message) {
     const text = $('cloudStatusText');
     const icon = $('cloudStatusIcon');
     if (!text || !icon) return;
-    text.classList.remove('is-online', 'is-offline', 'is-local-only', 'is-syncing', 'is-error');
+    text.classList.remove('is-online', 'is-offline', 'is-local-only', 'is-syncing', 'is-error', 'is-no-config');
     if (state) text.classList.add(state);
     text.textContent = message || '';
-    // 状态对应的图标
     const iconMap = {
         'is-online': '☁️✅',
         'is-offline': '☁️⛔',
         'is-local-only': '💾',
         'is-syncing': '🔄',
         'is-error': '⚠️',
+        'is-no-config': '⚙️',
     };
     icon.textContent = iconMap[state] || '☁️';
 }
 
-// 启动时刷新一次状态条（与 puterReady 配合）
+// 显示/隐藏按钮的辅助
+function setVisible(id, show) {
+    const el = $(id);
+    if (!el) return;
+    el.classList.toggle('hidden', !show);
+}
+
+// 启动时刷新一次状态条
 function refreshCloudStatus() {
     if (localOnlyMode()) {
         updateCloudStatus('is-local-only', '云端状态：仅本地存储（已关闭云端同步）');
+        setVisible('btnCloudLogin', false);
+        setVisible('btnCloudLogout', false);
+        setVisible('btnCloudSync', false);
+        setVisible('btnCloudPush', false);
         return;
     }
-    const p = window.puter;
-    if (!p || !p.kv || typeof p.kv.get !== 'function') {
-        updateCloudStatus('is-offline', '云端状态：Puter SDK 未加载，仅本地存储生效');
+    const cfg = getSupabaseConfig();
+    if (!cfg) {
+        updateCloudStatus('is-no-config', '云端状态：未配置 Supabase（点右上角"重新配置"）');
+        setVisible('btnCloudLogin', false);
+        setVisible('btnCloudLogout', false);
+        setVisible('btnCloudSync', false);
+        setVisible('btnCloudPush', false);
         return;
     }
-    let signedIn = false;
-    try { signedIn = p.auth && typeof p.auth.isSignedIn === 'function' ? p.auth.isSignedIn() === true : false; }
-    catch (err) { signedIn = false; }
-    if (signedIn) {
-        updateCloudStatus('is-online', '云端状态：已登录 Puter，自动实时同步中');
+    if (!supabaseClient) {
+        updateCloudStatus('is-error', '云端状态：Supabase 客户端初始化失败');
+        return;
+    }
+    if (supabaseUser) {
+        const email = supabaseUser.email || '(匿名)';
+        updateCloudStatus('is-online', `云端状态：已登录 ${email}，自动实时同步中`);
+        setVisible('btnCloudLogin', false);
+        setVisible('btnCloudLogout', true);
+        setVisible('btnCloudSync', true);
+        setVisible('btnCloudPush', true);
     } else {
-        updateCloudStatus('is-offline', '云端状态：未登录 Puter，仅本地存储生效');
+        updateCloudStatus('is-offline', '云端状态：未登录（点"登录云端"开启同步）');
+        setVisible('btnCloudLogin', true);
+        setVisible('btnCloudLogout', false);
+        setVisible('btnCloudSync', false);
+        setVisible('btnCloudPush', false);
     }
 }
 
 // 手动从云端拉取覆盖本地
 function manualPullFromCloud() {
-    if (localOnlyMode()) {
-        showToast('当前为"仅本地存储"模式，请先取消勾选', 'warning');
+    if (!cloudReady()) {
+        showToast('请先登录云端账号', 'warning');
         return;
     }
-    const p = window.puter;
-    if (!p || !p.kv || typeof p.kv.get !== 'function') {
-        showToast('Puter SDK 未加载，无法同步', 'error');
-        return;
-    }
-    let signedIn = false;
-    try { signedIn = p.auth && typeof p.auth.isSignedIn === 'function' ? p.auth.isSignedIn() === true : false; }
-    catch (err) { signedIn = false; }
-    if (!signedIn) {
-        showToast('请先登录 Puter 再同步', 'warning');
-        promptSignInPuter();
-        return;
-    }
-
     updateCloudStatus('is-syncing', '云端状态：正在从云端拉取…');
-    p.kv.get(PUTER_KEY).then(remote => {
-        if (!remote || typeof remote !== 'object') {
-            updateCloudStatus('is-online', '云端状态：云端暂无快照，无需覆盖');
-            showToast('云端暂无数据快照', 'info');
-            return;
-        }
-        const remoteTs = typeof remote.savedAt === 'number' ? remote.savedAt : 0;
-        const localRaw = localStorage.getItem(STORAGE_KEY);
-        const localTs = localRaw ? (JSON.parse(localRaw).savedAt || 0) : 0;
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
-        } catch (err) {
-            updateCloudStatus('is-error', '云端状态：写入本地失败');
-            showToast('写入本地失败：' + err.message, 'error');
-            return;
-        }
-        // 刷新页面让数据生效（最稳的做法，避免手工合并 state 出错）
-        showToast(`已从云端同步（云端 ${new Date(remoteTs).toLocaleString()} / 本地 ${new Date(localTs).toLocaleString()}），刷新页面查看`, 'success');
-        updateCloudStatus('is-online', `云端状态：已同步（${new Date(remoteTs).toLocaleString()}）`);
-        // 1.5s 后自动刷新页面让数据生效
-        setTimeout(() => location.reload(), 1500);
-    }).catch(err => {
-        console.warn('[cloud] 手动拉取失败：', err);
-        updateCloudStatus('is-error', '云端状态：拉取失败 ' + (err && err.message ? err.message : ''));
-        showToast('从云端拉取失败：' + (err && err.message ? err.message : ''), 'error');
-    });
+    const userId = supabaseUser.id;
+    supabaseClient.from('snapshots').select('payload').eq('user_id', userId).maybeSingle()
+        .then(({ data, error }) => {
+            if (error) throw error;
+            if (!data || !data.payload || typeof data.payload !== 'object') {
+                updateCloudStatus('is-online', '云端状态：云端暂无快照，无需覆盖');
+                showToast('云端暂无数据快照', 'info');
+                return;
+            }
+            const remote = data.payload;
+            const remoteTs = typeof remote.savedAt === 'number' ? remote.savedAt : 0;
+            const localRaw = localStorage.getItem(STORAGE_KEY);
+            const localTs = localRaw ? (JSON.parse(localRaw).savedAt || 0) : 0;
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
+            } catch (err) {
+                updateCloudStatus('is-error', '云端状态：写入本地失败');
+                showToast('写入本地失败：' + err.message, 'error');
+                return;
+            }
+            showToast(`已从云端同步（云端 ${new Date(remoteTs).toLocaleString()} / 本地 ${new Date(localTs).toLocaleString()}），刷新页面查看`, 'success');
+            updateCloudStatus('is-online', `云端状态：已同步（${new Date(remoteTs).toLocaleString()}）`);
+            setTimeout(() => location.reload(), 1500);
+        })
+        .catch(err => {
+            console.warn('[cloud] 拉取失败：', err);
+            updateCloudStatus('is-error', '云端状态：拉取失败 ' + (err && err.message ? err.message : ''));
+            showToast('从云端拉取失败：' + (err && err.message ? err.message : ''), 'error');
+        });
 }
 
 // 主动推送本地到云端
 function manualPushToCloud() {
-    if (localOnlyMode()) {
-        showToast('当前为"仅本地存储"模式，无法推送', 'warning');
-        return;
-    }
-    if (!puterReady()) {
-        showToast('请先登录 Puter 再推送', 'warning');
-        promptSignInPuter();
+    if (!cloudReady()) {
+        showToast('请先登录云端账号', 'warning');
         return;
     }
     updateCloudStatus('is-syncing', '云端状态：正在上传本地到云端…');
-    // 先把当前 state 立即存到本地，再上传
     saveState();
-    // saveState 已经异步发起了 kv.set；这里再 await 一次确保完成
-    const snapshot = (() => {
-        try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (err) { return null; }
-    })();
-    if (!snapshot) {
-        updateCloudStatus('is-error', '云端状态：本地无快照可上传');
+    let snapshot;
+    try { snapshot = JSON.parse(localStorage.getItem(STORAGE_KEY)); }
+    catch (err) {
+        updateCloudStatus('is-error', '云端状态：本地无快照');
         showToast('本地无数据可上传', 'error');
         return;
     }
-    window.puter.kv.set(PUTER_KEY, snapshot).then(() => {
-        updateCloudStatus('is-online', `云端状态：已上传（${new Date(snapshot.savedAt).toLocaleString()}）`);
-        showToast('本地数据已上传到云端', 'success');
-    }).catch(err => {
-        console.warn('[cloud] 手动推送失败：', err);
-        updateCloudStatus('is-error', '云端状态：上传失败 ' + (err && err.message ? err.message : ''));
-        showToast('上传失败：' + (err && err.message ? err.message : ''), 'error');
-    });
-}
-
-// 弹出 Puter 登录
-function promptSignInPuter() {
-    const p = window.puter;
-    if (!p || !p.auth || typeof p.auth.signIn !== 'function') {
-        showToast('Puter 登录功能不可用', 'error');
-        return;
-    }
-    showToast('正在打开 Puter 登录窗口…', 'info');
-    Promise.resolve()
-        .then(() => p.auth.signIn())
-        .then(() => {
-            showToast('Puter 登录成功', 'success');
-            refreshCloudStatus();
-            // 登录后立即尝试同步一次
-            syncFromPuter();
+    const userId = supabaseUser.id;
+    supabaseClient.from('snapshots')
+        .upsert({ user_id: userId, payload: snapshot }, { onConflict: 'user_id' })
+        .then(({ error }) => {
+            if (error) throw error;
+            updateCloudStatus('is-online', `云端状态：已上传（${new Date(snapshot.savedAt).toLocaleString()}）`);
+            showToast('本地数据已上传到云端', 'success');
         })
         .catch(err => {
-            console.warn('[cloud] 登录失败或取消：', err);
-            showToast('登录未完成：' + (err && err.message ? err.message : '已取消'), 'warning');
-            refreshCloudStatus();
+            console.warn('[cloud] 上传失败：', err);
+            updateCloudStatus('is-error', '云端状态：上传失败 ' + (err && err.message ? err.message : ''));
+            showToast('上传失败：' + (err && err.message ? err.message : ''), 'error');
         });
 }
 
-// 启动时根据条件提示登录（仅在未勾选仅本地 + Puter 就绪 + 未登录时）
-function maybePromptCloudSignIn() {
-    if (localOnlyMode()) return;
-    const p = window.puter;
-    if (!p || !p.auth || typeof p.auth.signIn !== 'function') return;
-    let signedIn = false;
-    try { signedIn = p.auth.isSignedIn() === true; } catch (err) { signedIn = false; }
-    if (signedIn) return;
-    // 延迟到主流程渲染完成再提示，避免和首屏 toast 冲突
-    setTimeout(() => {
-        const choice = window.confirm(
-            '【云端数据存储提示】\n\n' +
-            '检测到您尚未登录 Puter。当前所有数据仅保存在本机浏览器，' +
-            '清理浏览器缓存或更换设备将导致数据丢失。\n\n' +
-            '点击「确定」登录 Puter 开启云端同步；\n' +
-            '点击「取消」保持纯本地模式（之后仍可在顶部"云端同步"按钮或勾选"仅本地存储"）。'
-        );
-        if (choice) promptSignInPuter();
-    }, 800);
+// 登录对话框
+function openLoginDialog() {
+    const cfg = getSupabaseConfig();
+    if (!cfg) {
+        showToast('请先在"⚙️ 重新配置"里填写 Supabase URL 和 anon key', 'warning');
+        openConfigDialog();
+        return;
+    }
+    $('supabaseLoginEmail').value = '';
+    $('supabaseLoginPassword').value = '';
+    $('supabaseLoginDialog').classList.remove('hidden');
 }
 
-// 把保存的快照合并回 state（在 init 之外不暴露，仅供调试/手动覆盖后用）
-// （目前由 location.reload 完成）
+function closeLoginDialog() {
+    $('supabaseLoginDialog').classList.add('hidden');
+}
+
+async function submitLoginDialog() {
+    const email = ($('supabaseLoginEmail').value || '').trim();
+    const pwd = $('supabaseLoginPassword').value || '';
+    if (!email || !pwd) { showToast('请填写邮箱和密码', 'warning'); return; }
+    if (pwd.length < 6) { showToast('密码至少 6 位', 'warning'); return; }
+    updateCloudStatus('is-syncing', '云端状态：登录中…');
+    let result = await supabaseClient.auth.signInWithPassword({ email, password: pwd });
+    if (result.error) {
+        // 不存在则尝试注册
+        const r2 = await supabaseClient.auth.signUp({ email, password: pwd });
+        if (r2.error) {
+            updateCloudStatus('is-error', '云端状态：登录/注册失败 ' + r2.error.message);
+            showToast('登录失败：' + r2.error.message, 'error');
+            return;
+        }
+        if (r2.data && r2.data.session && r2.data.session.user) {
+            supabaseUser = r2.data.session.user;
+        } else {
+            // 注册成功但需确认邮箱
+            showToast('注册成功，请去邮箱点击确认链接后再登录', 'warning');
+            updateCloudStatus('is-offline', '云端状态：注册成功，等待邮箱确认');
+            closeLoginDialog();
+            return;
+        }
+    } else {
+        supabaseUser = result.data.session.user;
+    }
+    closeLoginDialog();
+    showToast('登录成功：' + supabaseUser.email, 'success');
+    refreshCloudStatus();
+    syncFromSupabase();
+}
+
+// 退出登录
+async function doLogout() {
+    if (!supabaseClient) return;
+    try {
+        await supabaseClient.auth.signOut();
+    } catch (err) { /* ignore */ }
+    supabaseUser = null;
+    refreshCloudStatus();
+    showToast('已退出云端登录（数据仍保留在云端）', 'info');
+}
+
+// 配置对话框
+function openConfigDialog() {
+    const cfg = getSupabaseConfig();
+    $('supabaseUrl').value = cfg ? cfg.url : '';
+    $('supabaseAnonKey').value = cfg ? cfg.anonKey : '';
+    $('supabaseConfigDialog').classList.remove('hidden');
+}
+
+function closeConfigDialog() {
+    $('supabaseConfigDialog').classList.add('hidden');
+}
+
+function submitConfigDialog() {
+    const url = ($('supabaseUrl').value || '').trim();
+    const key = ($('supabaseAnonKey').value || '').trim();
+    if (!/^https?:\/\/[^\s]+$/.test(url)) { showToast('URL 格式不正确，应以 http(s):// 开头', 'warning'); return; }
+    if (key.length < 20) { showToast('anon key 长度太短，请检查复制是否完整', 'warning'); return; }
+    setSupabaseConfig(url, key);
+    closeConfigDialog();
+    showToast('Supabase 配置已保存', 'success');
+    initSupabase();
+    refreshCloudStatus();
+}
+
+// 启动时根据条件提示登录/配置
+function maybePromptCloud() {
+    if (localOnlyMode()) return;
+    if (!getSupabaseConfig()) {
+        // 没配置过 → 自动弹出配置对话框（首次使用体验）
+        setTimeout(() => openConfigDialog(), 500);
+        return;
+    }
+    // 已配置但未登录 → 询问是否登录
+    setTimeout(() => {
+        if (supabaseUser) return;
+        const choice = window.confirm(
+            '【云端数据存储提示】\n\n' +
+            '检测到您尚未登录 Supabase。当前数据仅保存在本机浏览器，' +
+            '清理浏览器缓存或更换设备将导致数据丢失。\n\n' +
+            '点击「确定」打开登录窗口；\n' +
+            '点击「取消」保持本地模式（之后可在顶部"☁️ 登录云端"按钮登录或勾选"仅本地存储"）。'
+        );
+        if (choice) openLoginDialog();
+    }, 800);
+}
 
 // ===== 菜单路由 =====
 const pageTitles = {
@@ -2767,22 +2900,32 @@ document.addEventListener('click', (e) => {
     // 积分页面：触发一次 reconcile（不会重复加分，仅补缺失）
     if (typeof renderScorePage === 'function') renderScorePage();
 
-    // 启动后尝试从 Puter 云端拉取最新快照（仅当云端比本地新时覆盖）
-    syncFromPuter();
-
+    // 初始化 Supabase 客户端（异步恢复 session）
+    initSupabase();
     // 刷新云端状态条 + 未登录提示
     refreshCloudStatus();
-    maybePromptCloudSignIn();
+    maybePromptCloud();
 
     // 绑定云端同步按钮和"仅本地"勾选
+    const btnLogin = $('btnCloudLogin');
+    if (btnLogin) btnLogin.addEventListener('click', openLoginDialog);
+    const btnLogout = $('btnCloudLogout');
+    if (btnLogout) btnLogout.addEventListener('click', doLogout);
     const btnSync = $('btnCloudSync');
-    if (btnSync) {
-        btnSync.addEventListener('click', () => manualPullFromCloud());
-    }
+    if (btnSync) btnSync.addEventListener('click', manualPullFromCloud);
     const btnPush = $('btnCloudPush');
-    if (btnPush) {
-        btnPush.addEventListener('click', () => manualPushToCloud());
-    }
+    if (btnPush) btnPush.addEventListener('click', manualPushToCloud);
+    const btnConfig = $('btnCloudConfig');
+    if (btnConfig) btnConfig.addEventListener('click', openConfigDialog);
+
+    // 配置对话框
+    $('supabaseConfigCancel')?.addEventListener('click', closeConfigDialog);
+    $('supabaseConfigOk')?.addEventListener('click', submitConfigDialog);
+
+    // 登录对话框
+    $('supabaseLoginCancel')?.addEventListener('click', closeLoginDialog);
+    $('supabaseLoginOk')?.addEventListener('click', submitLoginDialog);
+
     const cbLocalOnly = $('cloudLocalOnly');
     if (cbLocalOnly) {
         cbLocalOnly.checked = localOnlyMode();
@@ -2790,9 +2933,9 @@ document.addEventListener('click', (e) => {
             setLocalOnlyMode(cbLocalOnly.checked);
             refreshCloudStatus();
             if (!cbLocalOnly.checked) {
-                // 取消勾选：尝试拉一次云端数据并询问是否登录
-                syncFromPuter();
-                maybePromptCloudSignIn();
+                // 取消勾选：重新提示登录 + 拉一次云端
+                maybePromptCloud();
+                syncFromSupabase();
             } else {
                 showToast('已切换为仅本地存储（云端将停止同步）', 'info');
             }

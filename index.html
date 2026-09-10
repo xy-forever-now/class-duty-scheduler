@@ -104,8 +104,11 @@
             <main class="main">
                 <!-- ===== 全局：云端同步工具栏（所有页面可见） ===== -->
                 <div class="cloud-toolbar">
-                    <button class="btn btn-secondary" id="btnCloudSync" title="从 Puter 云端拉取最新数据并覆盖本地">☁️ 云端同步（拉取覆盖）</button>
-                    <button class="btn btn-secondary" id="btnCloudPush" title="把当前本地数据主动推送到 Puter 云端">☁️ 上传本地到云端</button>
+                    <button class="btn btn-secondary" id="btnCloudLogin" title="登录或注册 Supabase 账号">☁️ 登录云端</button>
+                    <button class="btn btn-secondary hidden" id="btnCloudLogout" title="退出当前云端账号">退出登录</button>
+                    <button class="btn btn-secondary hidden" id="btnCloudSync" title="从云端拉取最新数据并覆盖本地">↓ 从云端拉取</button>
+                    <button class="btn btn-secondary hidden" id="btnCloudPush" title="把当前本地数据推送到云端">↑ 上传到云端</button>
+                    <button class="btn btn-secondary" id="btnCloudConfig" title="配置 Supabase 项目 URL 与 anon key">⚙️ 重新配置</button>
                     <div class="cloud-status-bar" id="cloudStatusBar">
                         <span class="cloud-status-icon" id="cloudStatusIcon">☁️</span>
                         <span class="cloud-status-text" id="cloudStatusText">云端状态：检测中…</span>
@@ -114,6 +117,43 @@
                         </label>
                     </div>
                 </div>
+
+                <!-- ===== 首启动 / 重配 Supabase 凭据 ===== -->
+                <div id="supabaseConfigDialog" class="attendance-note-dialog hidden">
+                    <div class="attendance-note-title">⚙️ 配置 Supabase 云端</div>
+                    <div class="score-rules-note">把在 Supabase 项目 → Project Settings → API 里复制的 URL 和 anon public key 粘贴到下面。仅存在浏览器本地，不会上传任何第三方服务。</div>
+                    <div class="score-rules-row">
+                        <label>Project URL</label>
+                        <input type="text" id="supabaseUrl" placeholder="https://xxxxx.supabase.co" style="flex:2;">
+                    </div>
+                    <div class="score-rules-row">
+                        <label>anon key</label>
+                        <input type="text" id="supabaseAnonKey" placeholder="eyJhbGciOi..." style="flex:2;">
+                    </div>
+                    <div class="attendance-note-actions">
+                        <button class="btn btn-secondary" id="supabaseConfigCancel">取消</button>
+                        <button class="btn btn-primary" id="supabaseConfigOk">保存配置</button>
+                    </div>
+                </div>
+
+                <!-- ===== 登录/注册 Supabase 账号 ===== -->
+                <div id="supabaseLoginDialog" class="attendance-note-dialog hidden">
+                    <div class="attendance-note-title">☁️ 登录 Supabase 云端</div>
+                    <div class="score-rules-note">首次输入邮箱和密码会自动注册；已有账号直接登录。</div>
+                    <div class="score-rules-row">
+                        <label>邮箱</label>
+                        <input type="email" id="supabaseLoginEmail" placeholder="teacher@example.com" style="flex:2;">
+                    </div>
+                    <div class="score-rules-row">
+                        <label>密码</label>
+                        <input type="password" id="supabaseLoginPassword" placeholder="≥6 位" style="flex:2;">
+                    </div>
+                    <div class="attendance-note-actions">
+                        <button class="btn btn-secondary" id="supabaseLoginCancel">取消</button>
+                        <button class="btn btn-primary" id="supabaseLoginOk">登录 / 注册</button>
+                    </div>
+                </div>
+
                 <!-- =============== 值班表页面（含排班配置） =============== -->
                 <section class="page" data-page="duty">
                     <div class="config-bar">
@@ -577,8 +617,8 @@
 
     <!-- SheetJS 库（用于Excel解析） -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-    <!-- Puter.js SDK（云端 KV 持久化，未登录/离线时自动降级到 localStorage） -->
-    <script src="https://js.puter.com/v2/"></script>
-    <script src="app.js?v=20260910-0100"></script>
+    <!-- Supabase JS SDK（云端 PostgreSQL 持久化，未登录/离线时自动降级到 localStorage） -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="app.js?v=20260910-0200"></script>
 </body>
 </html>
