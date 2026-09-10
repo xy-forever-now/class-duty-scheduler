@@ -1,5 +1,5 @@
 /**
- * 班级工作台 - 智能排班系统 v20260910-0220
+ * 班级工作台 - 智能排班系统 v20260910-0300
  * 主要功能：
  * 1. Excel导入解析（识别姓名、性别）
  * 2. 智能排班算法（轮空+下周优先）
@@ -7,6 +7,7 @@
  * 4. 座位表随机排座（完全随机 / 男女穿插 / 男女分区）
  * 5. 随机点名转盘
  * 6. Supabase 云端 PostgreSQL + localStorage 双重持久化（学生/值班表/座位表/点名历史/排班配置）
+ * 7. 全站登录拦截 + 仅本地逃生口；超级管理员白名单（yzx20010716@163.com）才能看到云端存储配置
  */
 
 // ===== 全局状态 =====
@@ -61,6 +62,17 @@ const SUPABASE_CONFIG_KEY = 'class-workbench.v1.supabaseConfig'; // { url, anonK
 // 当前 Supabase 客户端与 session（在 init 后或登录后填充）
 let supabaseClient = null;
 let supabaseUser = null;
+
+// ===== 全站登录拦截 + 超级管理员白名单 =====
+const ADMIN_EMAIL = 'yxz20010716@163.com';
+function isAdmin() {
+    if (!supabaseUser) return false;
+    return (supabaseUser.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase();
+}
+// 业务页是否允许访问（已登录云端或勾选仅本地都算通过）
+function isAccessGranted() {
+    return cloudReady() || localOnlyMode();
+}
 
 // 读取 URL/anon key 配置
 function getSupabaseConfig() {
@@ -117,7 +129,18 @@ function initSupabase() {
         if (error) { console.warn('[supabase] 恢复 session 失败：', error); return; }
         supabaseUser = data && data.session && data.session.user ? data.session.user : null;
         refreshCloudStatus();
-        if (supabaseUser) syncFromSupabase();
+        if (supabaseUser) {
+            syncFromSupabase();
+            // session 恢复成功 → 关闭登录遮罩，进入默认页
+            if (isAccessGranted()) {
+                closeLoginGate();
+                const cur = document.querySelector('.page:not(.hidden)')?.dataset.page;
+                if (!cur || cur === 'placeholder') switchPage('duty');
+            }
+        } else {
+            // session 恢复后仍未登录 → 打开遮罩
+            gateOpenIfNeeded();
+        }
     }).catch(err => console.warn('[supabase] getSession 异常：', err));
     return true;
 }
@@ -311,6 +334,138 @@ function refreshCloudStatus() {
     refreshSettingsStatus();
 }
 
+// ===== 全站登录拦截：遮罩开关 =====
+
+// 打开登录遮罩（同时锁定主内容）
+function openLoginGate(hint) {
+    const gate = $('loginGate');
+    if (!gate) return;
+    gate.classList.remove('hidden');
+    // 锁住主内容，避免遮罩期间的闪烁
+    const main = document.querySelector('.main');
+    if (main) main.style.visibility = 'hidden';
+    // 提示文案（管理员提示/未配置提示）
+    const hintEl = $('loginGateHint');
+    if (hintEl) hintEl.textContent = hint || '';
+    // 同步本地按钮可用性
+    refreshLoginGateLocalBtn();
+    // 自动聚焦邮箱框（未配置时不要聚焦）
+    if (getSupabaseConfig()) {
+        setTimeout(() => $('loginGateEmail')?.focus(), 50);
+    }
+}
+
+// 关闭登录遮罩（解锁主内容）
+function closeLoginGate() {
+    const gate = $('loginGate');
+    if (!gate) return;
+    gate.classList.add('hidden');
+    const main = document.querySelector('.main');
+    if (main) main.style.visibility = '';
+    // 清掉状态行/提示
+    setLoginGateStatus('', '');
+    setLoginGateHint('');
+}
+
+// 同步"仅本地"按钮可用性（需勾选复选框）
+function refreshLoginGateLocalBtn() {
+    const cb = $('loginGateLocalOnly');
+    const btn = $('loginGateLocalOnlyOk');
+    if (cb && btn) btn.disabled = !cb.checked;
+}
+
+// 设置遮罩状态行文本 + className（className 含 is-ok / is-info）
+function setLoginGateStatus(text, cls) {
+    const el = $('loginGateStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'login-gate-status' + (cls ? ' ' + cls : '');
+}
+
+// 设置遮罩底部小提示（管理员邮箱/未配置等）
+function setLoginGateHint(text) {
+    const el = $('loginGateHint');
+    if (el) el.textContent = text || '';
+}
+
+// 根据当前状态决定是否要打开登录遮罩
+function gateOpenIfNeeded() {
+    if (isAccessGranted()) {
+        // 已登录或仅本地：确保遮罩关闭
+        if (!$('loginGate')?.classList.contains('hidden')) closeLoginGate();
+        return false;
+    }
+    // 未登录且非仅本地：打开遮罩
+    let hint = '';
+    if (!getSupabaseConfig()) {
+        hint = '⚙️ 当前未配置 Supabase，请联系管理员在 Supabase 控制台完成配置后再使用，或选择「仅本地存储」。';
+    }
+    openLoginGate(hint);
+    return true;
+}
+
+// 登录遮罩：点击登录按钮
+async function submitLoginGate() {
+    const email = ($('loginGateEmail').value || '').trim();
+    const pwd = $('loginGatePassword').value || '';
+    if (!getSupabaseConfig()) {
+        setLoginGateStatus('请联系管理员先配置 Supabase URL 与 anon key，或使用「仅本地存储」', 'is-info');
+        return;
+    }
+    if (!email || !pwd) {
+        setLoginGateStatus('请填写邮箱和密码', '');
+        return;
+    }
+    if (pwd.length < 6) {
+        setLoginGateStatus('密码至少 6 位', '');
+        return;
+    }
+    if (!supabaseClient) initSupabase();
+    if (!supabaseClient) {
+        setLoginGateStatus('Supabase 客户端初始化失败，请稍后重试', '');
+        return;
+    }
+    setLoginGateStatus('登录中…', 'is-info');
+    let result = await supabaseClient.auth.signInWithPassword({ email, password: pwd });
+    if (result.error) {
+        // 不存在则尝试注册（仅在已配置好 URL 时才有意义）
+        const r2 = await supabaseClient.auth.signUp({ email, password: pwd });
+        if (r2.error) {
+            setLoginGateStatus('登录/注册失败：' + (r2.error.message || ''), '');
+            refreshCloudStatus();
+            return;
+        }
+        if (r2.data && r2.data.session && r2.data.session.user) {
+            supabaseUser = r2.data.session.user;
+        } else {
+            setLoginGateStatus('注册成功，请去邮箱点击确认链接后再登录（如已关闭邮箱确认请忽略）', 'is-info');
+            return;
+        }
+    } else {
+        supabaseUser = result.data.session.user;
+    }
+    setLoginGateStatus('登录成功，正在进入…', 'is-ok');
+    refreshCloudStatus();
+    syncFromSupabase();
+    // 关闭遮罩 + 进入默认页
+    setTimeout(() => {
+        closeLoginGate();
+        // 路由层守卫会自动放行
+        const cur = document.querySelector('.page:not(.hidden)')?.dataset.page;
+        if (!cur || cur === 'placeholder') switchPage('duty');
+    }, 300);
+}
+
+// 登录遮罩：点击"仅本地使用"按钮
+function submitLoginGateLocalOnly() {
+    setLocalOnlyMode(true);
+    refreshCloudStatus();
+    showToast('已切换为仅本地存储', 'info');
+    closeLoginGate();
+    const cur = document.querySelector('.page:not(.hidden)')?.dataset.page;
+    if (!cur || cur === 'placeholder') switchPage('duty');
+}
+
 // 手动从云端拉取覆盖本地
 function manualPullFromCloud() {
     if (!cloudReady()) {
@@ -466,31 +621,8 @@ function submitConfigDialog() {
     refreshCloudStatus();
 }
 
-// 启动时根据条件提示登录/配置
-function maybePromptCloud() {
-    if (localOnlyMode()) return;
-    if (!getSupabaseConfig()) {
-        // 没配置过 → 自动弹出配置对话框（首次使用体验）
-        setTimeout(() => openConfigDialog(), 500);
-        return;
-    }
-    // 已配置但未登录 → 询问是否登录
-    setTimeout(() => {
-        if (supabaseUser) return;
-        const choice = window.confirm(
-            '【云端数据存储提示】\n\n' +
-            '检测到您尚未登录 Supabase。当前数据仅保存在本机浏览器，' +
-            '清理浏览器缓存或更换设备将导致数据丢失。\n\n' +
-            '点击「确定」打开登录窗口；\n' +
-            '点击「取消」保持本地模式（之后可在左侧"🔧 系统设置"里登录或勾选"仅本地存储"）。'
-        );
-        if (choice) {
-            // 跳到设置页并聚焦邮箱输入框
-            switchPage('settings');
-            setTimeout(() => $('settingsLoginEmail')?.focus(), 200);
-        }
-    }, 800);
-}
+// 启动时根据条件提示登录/配置（已废弃：登录拦截由 openLoginGate 全权负责）
+function maybePromptCloud() { /* noop */ }
 
 // ===== 系统设置页 =====
 
@@ -503,6 +635,7 @@ function refreshSettingsStatus() {
     const cbLocalOnly = $('settingsLocalOnly');
     const inputUrl = $('settingsSupabaseUrl');
     const inputKey = $('settingsSupabaseKey');
+    const cloudCard = document.querySelector('.settings-card[data-card="cloud"]');
     if (!line) return;
 
     if (cbLocalOnly) cbLocalOnly.checked = localOnlyMode();
@@ -510,6 +643,11 @@ function refreshSettingsStatus() {
     const cfg = getSupabaseConfig();
     if (inputUrl && cfg) inputUrl.value = cfg.url;
     if (inputKey && cfg) inputKey.value = cfg.anonKey;
+
+    // 云端存储整张卡仅超级管理员可见
+    if (cloudCard) {
+        cloudCard.style.display = isAdmin() ? '' : 'none';
+    }
 
     // 已登录时整块登录表单隐藏（顶部状态条已有"退出登录"按钮）
     if (loginBlock) {
@@ -607,6 +745,11 @@ async function logoutFromCloud() {
     supabaseUser = null;
     showToast('已退出云端登录（云端数据保留）', 'info');
     refreshCloudStatus();
+    // 退出后强制打开登录遮罩（如果用户没勾选仅本地）
+    gateOpenIfNeeded();
+    if (!isAccessGranted()) {
+        switchPage('placeholder');
+    }
 }
 
 // 设置页：JSON 备份导出
@@ -710,6 +853,7 @@ function switchPage(pageName) {
 
 // ===== 菜单路由 =====
 const pageTitles = {
+    placeholder: { title: '🔒 请先登录', sub: '登录或切换本地模式以继续' },
     duty: { title: '🗓️ 值班表', sub: '配置规则并生成值班表' },
     seating: { title: '🪑 座位表', sub: '按排列数随机排座' },
     students: { title: '👥 学生管理', sub: '查看与管理班级学生' },
@@ -721,6 +865,25 @@ const pageTitles = {
 };
 
 function switchPage(pageName) {
+    // 路由守卫：未登录且非仅本地 → 强制打开登录遮罩，停留在占位页
+    if (!isAccessGranted() && pageName !== 'placeholder') {
+        gateOpenIfNeeded();
+        const mainEl = document.querySelector('.main');
+        if (mainEl) mainEl.style.visibility = 'hidden';
+        // 仍然把占位页"显示"，方便遮罩打开前的过渡视觉
+        document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+        document.querySelector('.page[data-page="placeholder"]')?.classList.remove('hidden');
+        // 菜单激活态清空
+        document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+        $('pageTitle').textContent = '🔒 请先登录';
+        $('pageSubtitle').textContent = '登录或切换本地模式以继续';
+        document.querySelectorAll('[data-show-on]').forEach(btn => { btn.style.display = 'none'; });
+        return;
+    }
+    // 通过 gate：解锁主内容
+    const mainEl = document.querySelector('.main');
+    if (mainEl) mainEl.style.visibility = '';
+
     // 隐藏所有页面
     document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
 
@@ -3111,8 +3274,25 @@ document.addEventListener('click', (e) => {
         setStatus('就绪 - 请导入Excel文件');
     }
 
-    // 显式初始化到值班表页面，确保顶部按钮可见
-    switchPage('duty');
+    // ===== 全站登录拦截 =====
+    // 首次渲染先到占位页（业务页隐藏）；登录遮罩会根据 isAccessGranted() 决定开关
+    switchPage('placeholder');
+    // 锁住主内容，避免遮罩期间业务页内容闪烁
+    const mainEl = document.querySelector('.main');
+    if (mainEl) mainEl.style.visibility = 'hidden';
+
+    // 初始化 Supabase 客户端（异步恢复 session；恢复成功会自动关闭遮罩）
+    initSupabase();
+    // 同步顶部条
+    refreshCloudStatus();
+    // 立即判定遮罩开关（处理仅本地模式）
+    gateOpenIfNeeded();
+    // 仅在已通过 gate 时才显示默认业务页
+    if (isAccessGranted()) {
+        if (mainEl) mainEl.style.visibility = '';
+        switchPage('duty');
+    }
+
     // 如果之前已经生成了值班表，重新渲染
     if (state.schedule) renderDutyTable();
     // 如果之前已经生成了座位表，重新渲染
@@ -3121,12 +3301,6 @@ document.addEventListener('click', (e) => {
     if (typeof renderAttendancePage === 'function') renderAttendancePage();
     // 积分页面：触发一次 reconcile（不会重复加分，仅补缺失）
     if (typeof renderScorePage === 'function') renderScorePage();
-
-    // 初始化 Supabase 客户端（异步恢复 session）
-    initSupabase();
-    // 刷新云端状态条 + 未登录提示
-    refreshCloudStatus();
-    maybePromptCloud();
 
     // 顶部"→ 系统设置"链接
     const goSettings = $('cloudStatusGoSettings');
@@ -3147,4 +3321,16 @@ document.addEventListener('click', (e) => {
 
     // 系统设置页：云端配置
     bindSettingsPage();
+
+    // ===== 全站登录拦截遮罩：事件绑定 =====
+    $('loginGateOk')?.addEventListener('click', submitLoginGate);
+    $('loginGateLocalOnlyOk')?.addEventListener('click', submitLoginGateLocalOnly);
+    $('loginGateLocalOnly')?.addEventListener('change', refreshLoginGateLocalBtn);
+    // 邮箱/密码框回车提交
+    $('loginGatePassword')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitLoginGate();
+    });
+    $('loginGateEmail')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') $('loginGatePassword')?.focus();
+    });
 })();

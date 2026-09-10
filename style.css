@@ -1917,6 +1917,135 @@ body {
 }
 .btn-dropdown-tip:hover { background: transparent; }
 
+/* ===== 全站登录拦截遮罩 ===== */
+.login-gate {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: loginGateFadeIn 0.18s ease-out;
+}
+.login-gate.hidden { display: none; }
+.login-gate-card {
+    background: #fff;
+    width: 100%;
+    max-width: 400px;
+    border-radius: 14px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    padding: 28px 26px 24px;
+    text-align: center;
+    animation: loginGateSlideUp 0.22s ease-out;
+}
+.login-gate-icon {
+    font-size: 36px;
+    line-height: 1;
+    margin-bottom: 8px;
+}
+.login-gate-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 6px;
+}
+.login-gate-sub {
+    font-size: 12px;
+    color: #6b7280;
+    line-height: 1.6;
+    margin-bottom: 18px;
+}
+.login-gate-field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    text-align: left;
+}
+.login-gate-field label {
+    flex: 0 0 60px;
+    font-size: 13px;
+    color: #374151;
+}
+.login-gate-field input {
+    flex: 1;
+    padding: 8px 11px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+    transition: border-color 0.15s;
+}
+.login-gate-field input:focus {
+    border-color: #3b82f6;
+    outline: none;
+}
+.login-gate-btn-primary {
+    width: 100%;
+    margin-top: 4px;
+    padding: 9px 12px;
+}
+.login-gate-btn-secondary {
+    width: 100%;
+    margin-top: 6px;
+    padding: 8px 12px;
+}
+.login-gate-divider {
+    display: flex;
+    align-items: center;
+    margin: 18px 0 14px;
+    color: #9ca3af;
+    font-size: 11px;
+}
+.login-gate-divider::before,
+.login-gate-divider::after {
+    content: '';
+    flex: 1;
+    border-top: 1px dashed #e5e7eb;
+}
+.login-gate-divider span {
+    padding: 0 10px;
+}
+.login-gate-local {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 12px;
+    color: #4b5563;
+    text-align: left;
+    padding: 6px 4px;
+}
+.login-gate-local input { cursor: pointer; margin: 0; }
+.login-gate-status {
+    margin-top: 12px;
+    font-size: 12px;
+    color: #dc2626;
+    min-height: 16px;
+}
+.login-gate-status.is-ok { color: #059669; }
+.login-gate-status.is-info { color: #2563eb; }
+.login-gate-hint {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #b45309;
+    min-height: 14px;
+    line-height: 1.5;
+}
+@keyframes loginGateFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes loginGateSlideUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
     .nav-menu:not(.collapsed) {

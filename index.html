@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>班级工作台 - 智能排班系统</title>
-    <link rel="stylesheet" href="style.css?v=20260909-2320">
+    <link rel="stylesheet" href="style.css?v=20260910-0300">
 </head>
 <body>
     <div class="app">
@@ -590,7 +590,7 @@
                     </div>
 
                     <!-- 云端存储配置 -->
-                    <div class="settings-card">
+                    <div class="settings-card" data-card="cloud">
                         <div class="settings-card-title">☁️ 云端存储（Supabase）</div>
                         <div class="settings-card-desc">把你的业务数据（学生 / 值班 / 座位 / 考勤 / 积分）同步到云端，多设备共享、换浏览器不丢数据。</div>
 
@@ -681,10 +681,40 @@
     <!-- Toast 提示 -->
     <div id="toast" class="toast"></div>
 
+    <!-- ===== 全站登录拦截遮罩（启动时由 JS 显示/隐藏，未登录时强制要求登录或切本地） ===== -->
+    <div id="loginGate" class="login-gate hidden" role="dialog" aria-modal="true" aria-labelledby="loginGateTitle">
+        <div class="login-gate-card">
+            <div class="login-gate-icon">🔒</div>
+            <div class="login-gate-title" id="loginGateTitle">班级工作台登录</div>
+            <div class="login-gate-sub">未登录不能使用任何功能，请先登录云端账号<br>或选择「仅本地存储」离线使用。</div>
+
+            <div class="login-gate-field">
+                <label>邮箱</label>
+                <input type="email" id="loginGateEmail" placeholder="teacher@example.com" autocomplete="username">
+            </div>
+            <div class="login-gate-field">
+                <label>密码</label>
+                <input type="password" id="loginGatePassword" placeholder="≥6 位" autocomplete="current-password">
+            </div>
+            <button class="btn btn-success login-gate-btn-primary" id="loginGateOk">登录 / 注册</button>
+
+            <div class="login-gate-divider"><span>或</span></div>
+
+            <label class="login-gate-local">
+                <input type="checkbox" id="loginGateLocalOnly">
+                <span>仅本地存储（不使用云端，数据仅保存在本浏览器）</span>
+            </label>
+            <button class="btn btn-secondary login-gate-btn-secondary" id="loginGateLocalOnlyOk" disabled>☁️ 仅本地使用</button>
+
+            <div class="login-gate-status" id="loginGateStatus"></div>
+            <div class="login-gate-hint" id="loginGateHint"></div>
+        </div>
+    </div>
+
     <!-- SheetJS 库（用于Excel解析） -->
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS SDK（云端 PostgreSQL 持久化，未登录/离线时自动降级到 localStorage） -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260910-0200"></script>
+    <script src="app.js?v=20260910-0300"></script>
 </body>
 </html>
