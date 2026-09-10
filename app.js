@@ -6,7 +6,7 @@
  * 3. 多页面菜单（值班表含排班配置 / 座位表 / 学生管理 / 随机点名）
  * 4. 座位表随机排座（完全随机 / 男女穿插 / 男女分区）
  * 5. 随机点名转盘
- * 6. localStorage 持久化（学生/值班表/座位表/点名历史/排班配置）
+ * 6. Puter.js 云端 KV + localStorage 双重持久化（学生/值班表/座位表/点名历史/排班配置）
  */
 
 // ===== 全局状态 =====
@@ -53,13 +53,28 @@ function showToast(msg, type = 'success') {
     setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-// ===== 本地缓存（localStorage） =====
+// ===== 本地缓存（localStorage + Puter.js 云端 KV 双重持久化） =====
 const STORAGE_KEY = 'class-workbench.v1';
+const PUTER_KEY = 'class-workbench:v1:snapshot'; // Puter KV 上的键名
+
+// 是否就绪：window.puter 存在 + puter.kv 存在 + 用户已登录
+function puterReady() {
+    if (typeof window === 'undefined') return false;
+    const p = window.puter;
+    if (!p || !p.kv || typeof p.kv.get !== 'function') return false;
+    // 未登录时调用 set/get 可能 throw；这里用 try 静默探测
+    try {
+        return p.auth && typeof p.auth.isSignedIn === 'function' ? p.auth.isSignedIn() === true : true;
+    } catch (err) {
+        return false;
+    }
+}
 
 function saveState() {
+    let snapshot;
     try {
         // 只保存业务数据，不保存 spinning 这种瞬时状态
-        const snapshot = {
+        snapshot = {
             students: state.students,
             schedule: state.schedule,
             seating: state.seating,
@@ -76,10 +91,23 @@ function saveState() {
             score: state.score,
             savedAt: Date.now(),
         };
+    } catch (err) {
+        console.warn('[cache] 构造快照失败：', err);
+        return;
+    }
+
+    // 1) 本地同步写：保证刷新页面不丢数据
+    try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
     } catch (err) {
-        // localStorage 不可用（隐私模式 / 配额满）时静默失败，不影响功能
-        console.warn('[cache] 保存失败：', err);
+        console.warn('[cache] localStorage 保存失败：', err);
+    }
+
+    // 2) 云端异步写：失败仅警告，不影响本地与界面
+    if (puterReady()) {
+        window.puter.kv.set(PUTER_KEY, snapshot).catch(err => {
+            console.warn('[cache] Puter 云端保存失败：', err);
+        });
     }
 }
 
@@ -103,8 +131,36 @@ function loadState() {
     }
 }
 
+// 启动后异步尝试从云端拉取；若云端版本更新则覆盖本地
+function syncFromPuter() {
+    if (!puterReady()) return;
+    window.puter.kv.get(PUTER_KEY).then(remote => {
+        if (!remote || typeof remote !== 'object') return;
+        const local = loadState();
+        const remoteTs = typeof remote.savedAt === 'number' ? remote.savedAt : 0;
+        const localTs = local && typeof local.savedAt === 'number' ? local.savedAt : 0;
+        if (remoteTs <= localTs) return; // 本地更新，无需覆盖
+        // 云端更新，覆盖本地并提示用户
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
+            showToast && showToast('已从云端同步最新数据，刷新页面查看', 'success');
+        } catch (err) {
+            console.warn('[cache] 同步云端到本地失败：', err);
+        }
+    }).catch(err => {
+        console.warn('[cache] 读取云端失败：', err);
+    });
+}
+
 function clearStoredState() {
     try { localStorage.removeItem(STORAGE_KEY); } catch (err) { /* ignore */ }
+    // 异步清掉云端自有 key（不调用 flush，避免影响用户其他数据）
+    if (puterReady()) {
+        const puter = window.puter;
+        puter.kv.del(PUTER_KEY).catch(err => {
+            console.warn('[cache] 清空 Puter 失败：', err);
+        });
+    }
 }
 
 function setStatus(text) {
@@ -2524,4 +2580,7 @@ document.addEventListener('click', (e) => {
     if (typeof renderAttendancePage === 'function') renderAttendancePage();
     // 积分页面：触发一次 reconcile（不会重复加分，仅补缺失）
     if (typeof renderScorePage === 'function') renderScorePage();
+
+    // 启动后尝试从 Puter 云端拉取最新快照（仅当云端比本地新时覆盖）
+    syncFromPuter();
 })();
