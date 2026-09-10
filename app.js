@@ -1,5 +1,5 @@
 /**
- * 班级工作台 - 智能排班系统 v20260910-0300
+ * 班级工作台 - 智能排班系统 v20260910-0400
  * 主要功能：
  * 1. Excel导入解析（识别姓名、性别）
  * 2. 智能排班算法（轮空+下周优先）
@@ -64,7 +64,7 @@ let supabaseClient = null;
 let supabaseUser = null;
 
 // ===== 全站登录拦截 + 超级管理员白名单 =====
-const ADMIN_EMAIL = 'yxz20010716@163.com';
+const ADMIN_EMAIL = 'yzx20010716@163.com';
 function isAdmin() {
     if (!supabaseUser) return false;
     return (supabaseUser.email || '').toLowerCase() === ADMIN_EMAIL.toLowerCase();
