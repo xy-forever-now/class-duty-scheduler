@@ -333,8 +333,8 @@ function refreshCloudStatus() {
     // 同步设置页状态（如果设置页 DOM 已加载）
     // 同步设置页状态（如果设置页 DOM 已加载）
     refreshSettingsStatus();
-    // 同步账号卡状态（独立卡，对所有人可见）
-    refreshAccountCardStatus();
+    // 同步侧边栏登录按钮的显示状态
+    refreshNavLoginBtn();
 }
 
 // ===== 全站登录拦截：遮罩开关 =====
@@ -389,6 +389,30 @@ function setLoginGateStatus(text, cls) {
 function setLoginGateHint(text) {
     const el = $('loginGateHint');
     if (el) el.textContent = text || '';
+}
+
+// 同步侧边栏"☁️ 登录"按钮的可见性/文字
+// 已登录时隐藏，未登录或仅本地时显示（按钮始终可点，未配置 URL 时遮罩会提示）
+function refreshNavLoginBtn() {
+    const btn = $('navLoginBtn');
+    if (!btn) return;
+    if (supabaseUser) {
+        btn.style.display = 'none';
+    } else {
+        btn.style.display = '';
+        btn.textContent = '☁️ 登录云端';
+        btn.disabled = false;
+    }
+}
+
+// 点击侧边栏登录按钮：直接弹出首页登录遮罩
+function openLoginFromNav() {
+    // 清空输入
+    const emailEl = $('loginGateEmail');
+    const pwdEl = $('loginGatePassword');
+    if (emailEl) emailEl.value = '';
+    if (pwdEl) pwdEl.value = '';
+    openLoginGate();
 }
 
 // 根据当前状态决定是否要打开登录遮罩
@@ -709,111 +733,6 @@ function settingsClearCloudConfig() {
     showToast('已清除 Supabase 配置', 'info');
     refreshSettingsStatus();
     refreshCloudStatus();
-    refreshAccountCardStatus();
-}
-
-// ===== 云端账号登录卡（独立卡，对所有人可见；让"仅本地"用户也能切回云端） =====
-
-// 同步账号卡 UI
-function refreshAccountCardStatus() {
-    const line = $('settingsAccountStatus');
-    const btnLogin = $('settingsAccountLogin');
-    const btnLogout = $('settingsAccountLogout');
-    const btnLocalOnly = $('settingsAccountLocalOnly');
-    if (!line) return;
-
-    let cls = '', text = '云端账号：检测中…';
-    if (localOnlyMode()) {
-        cls = 'is-local-only';
-        text = '云端账号：仅本地存储（输入邮箱密码即可登录云端）';
-    } else if (!getSupabaseConfig()) {
-        cls = 'is-no-config';
-        text = '云端账号：尚未配置 Supabase，请联系管理员配置后再登录';
-    } else if (!supabaseClient) {
-        cls = 'is-error';
-        text = '云端账号：客户端初始化失败';
-    } else if (supabaseUser) {
-        cls = 'is-online';
-        text = `云端账号：已登录 ${supabaseUser.email || ''}（${isAdmin() ? '超级管理员' : '普通账号'}）`;
-    } else {
-        cls = 'is-offline';
-        text = '云端账号：未登录（输入邮箱密码登录）';
-    }
-    line.className = 'settings-status-line ' + cls;
-    line.textContent = text;
-
-    // 已登录 → 登录按钮禁用，退出按钮显示；未登录或仅本地 → 登录按钮可用
-    if (btnLogin) btnLogin.disabled = !!supabaseUser;
-    if (btnLogout) btnLogout.hidden = !supabaseUser;
-    if (btnLocalOnly) {
-        btnLocalOnly.disabled = localOnlyMode();
-        btnLocalOnly.textContent = localOnlyMode() ? '已是仅本地存储' : '☁️ 仅本地存储';
-    }
-}
-
-// 设置页账号卡：登录（与设置页 settingsLogin 逻辑类似，但走独立输入框）
-async function settingsAccountLogin() {
-    const email = ($('settingsAccountEmail').value || '').trim();
-    const pwd = $('settingsAccountPassword').value || '';
-    if (!getSupabaseConfig()) {
-        showToast('请联系管理员先在 Supabase 配置卡里填写 Project URL 与 anon key', 'warning');
-        return;
-    }
-    if (!email || !pwd) { showToast('请填写邮箱和密码', 'warning'); return; }
-    if (pwd.length < 6) { showToast('密码至少 6 位', 'warning'); return; }
-    if (!supabaseClient) initSupabase();
-    if (!supabaseClient) { showToast('Supabase 客户端未就绪', 'error'); return; }
-
-    let result = await supabaseClient.auth.signInWithPassword({ email, password: pwd });
-    if (result.error) {
-        const r2 = await supabaseClient.auth.signUp({ email, password: pwd });
-        if (r2.error) {
-            showToast('登录/注册失败：' + r2.error.message, 'error');
-            refreshAccountCardStatus();
-            return;
-        }
-        if (r2.data && r2.data.session && r2.data.session.user) {
-            supabaseUser = r2.data.session.user;
-        } else {
-            showToast('注册成功，请去邮箱点击确认链接后再登录（如已关闭邮箱确认请忽略）', 'warning');
-            refreshAccountCardStatus();
-            return;
-        }
-    } else {
-        supabaseUser = result.data.session.user;
-    }
-    // 登录成功：从仅本地切到云端时，关掉仅本地模式
-    if (localOnlyMode()) setLocalOnlyMode(false);
-    // 清掉密码框
-    $('settingsAccountPassword').value = '';
-    showToast('登录成功：' + supabaseUser.email, 'success');
-    refreshCloudStatus();
-    syncFromSupabase();
-}
-
-// 设置页账号卡：退出登录
-async function settingsAccountLogout() {
-    if (!supabaseClient || !supabaseUser) return;
-    try { await supabaseClient.auth.signOut(); } catch (err) { /* ignore */ }
-    supabaseUser = null;
-    $('settingsAccountPassword').value = '';
-    showToast('已退出云端登录（云端数据保留）', 'info');
-    refreshCloudStatus();
-    refreshAccountCardStatus();
-    // 退出后 gate 判定：未登录又未勾选仅本地 → 弹回登录遮罩
-    if (!isAccessGranted()) {
-        gateOpenIfNeeded();
-        switchPage('placeholder');
-    }
-}
-
-// 设置页账号卡：切换为仅本地
-function settingsAccountLocalOnly() {
-    if (localOnlyMode()) return;
-    setLocalOnlyMode(true);
-    showToast('已切换为仅本地存储', 'info');
-    refreshCloudStatus();
-    refreshAccountCardStatus();
 }
 
 // 设置页：登录/注册
@@ -922,20 +841,11 @@ function bindSettingsPage() {
     $('settingsCloudPull')?.addEventListener('click', () => manualPullFromCloud());
     $('settingsCloudPush')?.addEventListener('click', () => manualPushToCloud());
 
-    // 账号卡（独立卡，对所有人可见）
-    $('settingsAccountLogin')?.addEventListener('click', settingsAccountLogin);
-    $('settingsAccountLogout')?.addEventListener('click', settingsAccountLogout);
-    $('settingsAccountLocalOnly')?.addEventListener('click', settingsAccountLocalOnly);
-    $('settingsAccountPassword')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') settingsAccountLogin();
-    });
-
     const cbLocalOnly = $('settingsLocalOnly');
     if (cbLocalOnly) {
         cbLocalOnly.addEventListener('change', () => {
             setLocalOnlyMode(cbLocalOnly.checked);
             refreshCloudStatus();
-            refreshAccountCardStatus();
             if (cbLocalOnly.checked) showToast('已切换为仅本地存储', 'info');
             else { refreshSettingsStatus(); syncFromSupabase(); }
         });
@@ -3450,4 +3360,7 @@ document.addEventListener('click', (e) => {
     $('loginGateEmail')?.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') $('loginGatePassword')?.focus();
     });
+
+    // ===== 侧边栏登录按钮 =====
+    $('navLoginBtn')?.addEventListener('click', openLoginFromNav);
 })();

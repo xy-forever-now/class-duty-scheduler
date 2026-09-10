@@ -1917,6 +1917,34 @@ body {
 }
 .btn-dropdown-tip:hover { background: transparent; }
 
+/* ===== 侧边栏底部：登录按钮 ===== */
+.nav-login-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 9px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+.nav-login-btn:hover {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.6);
+}
+.nav-login-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+.nav-menu.collapsed .nav-login-btn { display: none; }
+
 /* ===== 全站登录拦截遮罩 ===== */
 .login-gate {
     position: fixed;
