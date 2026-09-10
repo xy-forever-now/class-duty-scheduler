@@ -2147,7 +2147,7 @@ function openScoreRulesDialog() {
     $('ruleAttMakeup').value  = r.attendance.makeup;
     $('ruleAttLeave').value   = r.attendance.leave;
     $('ruleDuty').value       = r.duty;
-    $('ruleRoll').value       = r.rollcall;
+    // rollcall 不在 UI 中暴露（点名命中由老师手动加分）
     dlg.classList.remove('hidden');
 }
 
@@ -2163,11 +2163,11 @@ function resetScoreRulesDialog() {
     $('ruleAttMakeup').value  = r.attendance.makeup;
     $('ruleAttLeave').value   = r.attendance.leave;
     $('ruleDuty').value       = r.duty;
-    $('ruleRoll').value       = r.rollcall;
 }
 
 // 保存规则：先清掉所有联动分（attendance/duty/rollcall），按新规则重新生成
 function saveScoreRules() {
+    const oldRules = getScoreRules();
     const newRules = {
         attendance: {
             present: Number($('ruleAttPresent').value),
@@ -2176,7 +2176,7 @@ function saveScoreRules() {
             leave:   Number($('ruleAttLeave').value),
         },
         duty:     Number($('ruleDuty').value),
-        rollcall: Number($('ruleRoll').value),
+        rollcall: oldRules.rollcall || 0,
     };
     // 1) 写规则
     writeScoreRules(newRules);
