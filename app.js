@@ -1,5 +1,5 @@
 /**
- * 班级工作台 - 智能排班系统 v20260910-0500
+ * 班级工作台 - 智能排班系统 v20260910-0600
  * 主要功能：
  * 1. Excel导入解析（识别姓名、性别）
  * 2. 智能排班算法（轮空+下周优先）
@@ -964,9 +964,45 @@ document.querySelectorAll('.nav-item').forEach(item => {
     });
 });
 
-// 折叠菜单
-$('navToggle').addEventListener('click', () => {
+// 折叠菜单（PC 端 nav-toggle 按钮）
+$('navToggle')?.addEventListener('click', () => {
     $('navMenu').classList.toggle('collapsed');
+    closeMobileNav();
+});
+
+// ===== 移动端侧栏汉堡唤出 + 遮罩 =====
+const navMenuEl = $('navMenu');
+const navBackdropEl = $('navBackdrop');
+function isMobile() { return window.matchMedia('(max-width: 768px)').matches; }
+
+function openMobileNav() {
+    if (!isMobile() || !navMenuEl) return;
+    navMenuEl.classList.add('mobile-open');
+    navBackdropEl?.classList.add('show');
+    document.body.style.overflow = 'hidden';
+}
+function closeMobileNav() {
+    navMenuEl?.classList.remove('mobile-open');
+    navBackdropEl?.classList.remove('show');
+    document.body.style.overflow = '';
+}
+
+$('hamburger')?.addEventListener('click', openMobileNav);
+navBackdropEl?.addEventListener('click', closeMobileNav);
+
+// 移动端：点菜单项后收起
+document.querySelectorAll('.nav-item').forEach(li => {
+    li.addEventListener('click', () => { if (isMobile()) closeMobileNav(); });
+});
+
+// 视口尺寸变化时复位：变宽时清掉 mobile-open（防止 PC 端仍带 fixed 残留）
+let __navMql = window.matchMedia('(max-width: 768px)');
+__navMql.addEventListener('change', e => {
+    if (!e.matches) closeMobileNav();
+    // PC 端保持当前 collapsed 状态；窄屏恢复默认 collapsed
+    if (e.matches && navMenuEl && !navMenuEl.classList.contains('collapsed') && !window.__navUserToggled) {
+        navMenuEl.classList.add('collapsed');
+    }
 });
 
 // ===== Excel 导入与解析 =====
@@ -3488,6 +3524,9 @@ document.addEventListener('click', (e) => {
         if (mainEl) mainEl.style.visibility = '';
         switchPage('duty');
     }
+
+    // 窄屏默认收起侧栏（不要在窄屏展开时挤压主内容）
+    if (isMobile() && navMenuEl) navMenuEl.classList.add('collapsed');
 
     // 如果之前已经生成了值班表，重新渲染
     if (state.schedule) renderDutyTable();

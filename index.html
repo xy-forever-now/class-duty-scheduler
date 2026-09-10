@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>班级工作台 - 智能排班系统</title>
-    <link rel="stylesheet" href="style.css?v=20260910-0500">
+    <link rel="stylesheet" href="style.css?v=20260910-0600">
 </head>
 <body>
     <div class="app">
@@ -74,8 +74,11 @@
 
         <!-- 主内容容器 -->
         <div class="app-container">
+            <!-- 移动端侧边栏遮罩 -->
+            <div class="nav-backdrop" id="navBackdrop"></div>
             <!-- 顶部标题栏 -->
             <header class="header">
+                <button class="hamburger" id="hamburger" title="打开菜单" aria-label="打开菜单">☰</button>
                 <div class="header-left">
                     <h1 id="pageTitle">🗓️ 值班表</h1>
                     <span class="subtitle" id="pageSubtitle">智能排班系统</span>
@@ -763,6 +766,6 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS SDK（云端 PostgreSQL 持久化，未登录/离线时自动降级到 localStorage） -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260910-0500"></script>
+    <script src="app.js?v=20260910-0600"></script>
 </body>
 </html>

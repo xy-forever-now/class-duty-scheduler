@@ -2131,13 +2131,113 @@ body {
 }
 
 /* ===== 响应式 ===== */
+
+/* 汉堡按钮：默认 PC 隐藏 */
+.hamburger {
+    display: none;
+    width: 36px;
+    height: 36px;
+    margin-right: 12px;
+    border: none;
+    background: transparent;
+    color: #4f46e5;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 6px;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.hamburger:hover { background: rgba(79, 70, 229, 0.08); }
+
+/* 遮罩：默认隐藏 */
+.nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.45);
+    z-index: 150;
+    backdrop-filter: blur(1px);
+    animation: navFadeIn 0.2s ease;
+}
+.nav-backdrop.show { display: block; }
+@keyframes navFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* 窄屏：默认折叠菜单、汉堡唤出 + 遮罩 */
 @media (max-width: 768px) {
-    .nav-menu:not(.collapsed) {
+    /* 顶栏更紧 */
+    .header { padding: 12px 16px; }
+    .header-left h1 { font-size: 16px; }
+    .subtitle { font-size: 11px; }
+
+    /* 汉堡按钮显示 */
+    .hamburger { display: flex; }
+    /* PC 端 nav-toggle 在窄屏隐藏（汉堡是唯一入口） */
+    .nav-toggle { display: none; }
+
+    /* 收起状态：侧栏变细条，主区有位置 */
+    .nav-menu.collapsed {
+        width: 64px;
+    }
+    .nav-menu.collapsed.mobile-open {
+        /* 展开时强制 fixed 全屏，盖住主内容 */
         position: fixed;
+        top: 0;
+        left: 0;
+        width: 260px;
         height: 100vh;
-        z-index: 200;
+        z-index: 250;
+        box-shadow: 4px 0 18px rgba(0, 0, 0, 0.2);
+        animation: navSlideIn 0.22s ease;
     }
-    .student-stats-grid {
-        grid-template-columns: 1fr;
+    @keyframes navSlideIn { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+
+    /* 未展开时主内容占满（侧栏 64px 还在流里，保持布局稳） */
+    .main { padding: 16px; }
+
+    /* 配置条变单列 */
+    .config-bar { gap: 12px; padding: 14px; }
+    .config-item { flex: 1 1 100%; min-width: 0; }
+    .config-item-tip { margin-left: 0; max-width: none; text-align: left; }
+
+    /* 统计卡单列 */
+    .student-stats-grid { grid-template-columns: 1fr 1fr; }
+    .attendance-stats { grid-template-columns: 1fr 1fr; }
+    .score-stats { grid-template-columns: 1fr 1fr; }
+
+    /* 表格容器横向滚动（避免挤爆） */
+    .duty-table-container,
+    .attendance-table-container,
+    .score-table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .duty-table, .attendance-table, .score-table { min-width: 560px; }
+
+    /* 学生卡片网格：移动端更紧凑 */
+    .student-card-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; }
+    .student-card { padding: 10px; }
+    .student-card .student-name { font-size: 13px; }
+
+    /* 顶栏右侧按钮变小、字小 */
+    .btn { padding: 7px 10px; font-size: 13px; }
+    .header-right .btn { padding: 6px 8px; font-size: 12px; }
+
+    /* 通用 dialog 在窄屏贴边 */
+    .attendance-note-dialog,
+    .login-gate-card {
+        width: calc(100vw - 24px) !important;
+        max-width: 360px;
+        max-height: 92vh;
+        overflow-y: auto;
     }
+    .login-gate-card { padding: 20px !important; }
+}
+
+/* 超窄屏：考勤/学生统计 1 列；表格最小宽度缩 */
+@media (max-width: 420px) {
+    .student-stats-grid,
+    .attendance-stats,
+    .score-stats { grid-template-columns: 1fr; }
+    .duty-table, .attendance-table, .score-table { font-size: 12px; }
+    .header-left h1 { font-size: 15px; }
+    .btn { padding: 6px 8px; font-size: 12px; }
 }
