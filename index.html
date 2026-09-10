@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>班级工作台 - 智能排班系统</title>
-    <link rel="stylesheet" href="style.css?v=20260910-0600">
+    <link rel="stylesheet" href="style.css?v=20260910-0700">
 </head>
 <body>
     <div class="app">
@@ -84,23 +84,6 @@
                     <span class="subtitle" id="pageSubtitle">智能排班系统</span>
                 </div>
                 <div class="header-right">
-                    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
-                    <button id="btnGenerate" class="btn btn-success" disabled data-show-on="duty">
-                        🎲 生成值班表
-                    </button>
-                    <button id="btnExport" class="btn btn-warning" disabled data-show-on="duty">
-                        📤 导出Excel
-                    </button>
-                    <button id="btnPrint" class="btn btn-info" disabled data-show-on="duty">
-                        🖨️ 打印
-                    </button>
-                </div>
-            </header>
-
-            <!-- 主内容区 -->
-            <main class="main">
-                <!-- ===== 全局：云端状态条（所有页面可见，详细控制请进系统设置） ===== -->
-                <div class="cloud-toolbar">
                     <div class="cloud-status-bar" id="cloudStatusBar">
                         <span class="cloud-status-icon" id="cloudStatusIcon">☁️</span>
                         <span class="cloud-status-text" id="cloudStatusText">云端状态：检测中…</span>
@@ -108,6 +91,23 @@
                         <button class="cloud-status-logout hidden" id="cloudStatusLogout" title="退出云端登录">退出登录</button>
                         <a class="cloud-status-link" href="#" id="cloudStatusGoSettings">→ 系统设置</a>
                     </div>
+                </div>
+            </header>
+
+            <!-- 主内容区 -->
+            <main class="main">
+                <!-- ===== 值班表页：操作按钮（生成 / 导出 / 打印） ===== -->
+                <div class="duty-toolbar" data-show-on="duty" hidden>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                    <button id="btnGenerate" class="btn btn-success" disabled>
+                        🎲 生成值班表
+                    </button>
+                    <button id="btnExport" class="btn btn-warning" disabled>
+                        📤 导出Excel
+                    </button>
+                    <button id="btnPrint" class="btn btn-info" disabled>
+                        🖨️ 打印
+                    </button>
                 </div>
 
                 <!-- ===== 首启动 / 重配 Supabase 凭据 ===== -->
@@ -766,6 +766,6 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS SDK（云端 PostgreSQL 持久化，未登录/离线时自动降级到 localStorage） -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260910-0600"></script>
+    <script src="app.js?v=20260910-0700"></script>
 </body>
 </html>
