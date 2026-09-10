@@ -71,7 +71,10 @@ function getSupabaseConfig() {
         if (!obj || typeof obj.url !== 'string' || typeof obj.anonKey !== 'string') return null;
         if (!/^https?:\/\//.test(obj.url)) return null;
         if (obj.anonKey.length < 20) return null;
-        return { url: obj.url.replace(/\/$/, ''), anonKey: obj.anonKey };
+        // 容错：去掉结尾斜杠，以及常见的 "/rest/v1" 后缀（用户可能误把 API base URL 当 Project URL 复制）
+        let url = obj.url.replace(/\/+$/, '');
+        url = url.replace(/\/rest\/v1$/i, '');
+        return { url, anonKey: obj.anonKey };
     } catch (err) {
         return null;
     }
@@ -453,9 +456,11 @@ function closeConfigDialog() {
 }
 
 function submitConfigDialog() {
-    const url = ($('supabaseUrl').value || '').trim();
+    let url = ($('supabaseUrl').value || '').trim();
     const key = ($('supabaseAnonKey').value || '').trim();
     if (!/^https?:\/\/[^\s]+$/.test(url)) { showToast('URL 格式不正确，应以 http(s):// 开头', 'warning'); return; }
+    // 容错：去掉结尾斜杠和可能的 "/rest/v1" 后缀
+    url = url.replace(/\/+$/, '').replace(/\/rest\/v1$/i, '');
     if (key.length < 20) { showToast('anon key 长度太短，请检查复制是否完整', 'warning'); return; }
     setSupabaseConfig(url, key);
     closeConfigDialog();
