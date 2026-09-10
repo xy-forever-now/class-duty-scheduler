@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>班级工作台 - 智能排班系统</title>
-    <link rel="stylesheet" href="style.css?v=20260910-0300">
+    <link rel="stylesheet" href="style.css?v=20260910-0500">
 </head>
 <body>
     <div class="app">
@@ -169,23 +169,28 @@
                         <div class="config-item config-item-duties">
                             <label>每日职务及人数</label>
                             <div id="dutyCheckboxes" class="duty-chip-list">
-                                <span class="duty-chip">
-                                    🧹 扫地
+                                <span class="duty-chip" data-duty-chip="扫地">
+                                    <span class="duty-chip-name">🧹 扫地</span>
                                     <input type="number" class="duty-count" data-duty="扫地" value="2" min="0" max="5">
+                                    <button class="duty-chip-del" title="删除该职务">×</button>
                                 </span>
-                                <span class="duty-chip">
-                                    📝 擦黑板
+                                <span class="duty-chip" data-duty-chip="擦黑板">
+                                    <span class="duty-chip-name">📝 擦黑板</span>
                                     <input type="number" class="duty-count" data-duty="擦黑板" value="1" min="0" max="5">
+                                    <button class="duty-chip-del" title="删除该职务">×</button>
                                 </span>
-                                <span class="duty-chip">
-                                    🗑️ 倒垃圾
+                                <span class="duty-chip" data-duty-chip="倒垃圾">
+                                    <span class="duty-chip-name">🗑️ 倒垃圾</span>
                                     <input type="number" class="duty-count" data-duty="倒垃圾" value="1" min="0" max="5">
+                                    <button class="duty-chip-del" title="删除该职务">×</button>
                                 </span>
-                                <span class="duty-chip">
-                                    🪑 摆桌椅
+                                <span class="duty-chip" data-duty-chip="摆桌椅">
+                                    <span class="duty-chip-name">🪑 摆桌椅</span>
                                     <input type="number" class="duty-count" data-duty="摆桌椅" value="1" min="0" max="5">
+                                    <button class="duty-chip-del" title="删除该职务">×</button>
                                 </span>
                             </div>
+                            <button class="btn btn-secondary duty-chip-add" id="btnAddDuty">+ 添加职务</button>
                         </div>
                         <div class="config-item config-item-tip">
                             <span class="config-slot-text" id="dutySlotInfo">每周坑位 25 ／ 可排 0 人</span>
@@ -207,6 +212,7 @@
                     <div class="content-header-bar">
                         <h2>👥 学生管理</h2>
                         <div>
+                            <button class="btn btn-success" id="btnAddStudent">+ 添加学生</button>
                             <button class="btn btn-primary" id="btnImportStudents">
                                 📥 导入学生
                             </button>
@@ -584,6 +590,47 @@
                     </div>
                 </section>
 
+                <!-- 全局 dialog：脱离任何 page，任意页面都可打开 -->
+                <!-- ===== 添加单个学生 ===== -->
+                <div id="addStudentDialog" class="attendance-note-dialog hidden">
+                    <div class="attendance-note-title">➕ 添加学生</div>
+                    <div class="score-rules-note">手动添加一个学生；姓名重复会自动跳过。多次点击「保存」可继续添加。</div>
+                    <div class="score-rules-row">
+                        <label>姓名</label>
+                        <input type="text" id="addStudentName" placeholder="例如 张三" maxlength="20" style="flex:2;">
+                    </div>
+                    <div class="score-rules-row">
+                        <label>性别</label>
+                        <select id="addStudentGender" style="flex:2;">
+                            <option value="男">男</option>
+                            <option value="女">女</option>
+                            <option value="">未知</option>
+                        </select>
+                    </div>
+                    <div class="attendance-note-actions">
+                        <button class="btn btn-secondary" id="addStudentCancel">取消</button>
+                        <button class="btn btn-primary" id="addStudentSave">保存</button>
+                    </div>
+                </div>
+
+                <!-- ===== 添加值班职务 ===== -->
+                <div id="addDutyDialog" class="attendance-note-dialog hidden">
+                    <div class="attendance-note-title">➕ 添加值班职务</div>
+                    <div class="score-rules-note">例如 「关窗」「浇花」；人数默认为 1，添加后可在主界面调整或删除。</div>
+                    <div class="score-rules-row">
+                        <label>职务名</label>
+                        <input type="text" id="addDutyName" placeholder="例如 关窗" maxlength="20" style="flex:2;">
+                    </div>
+                    <div class="score-rules-row">
+                        <label>默认人数</label>
+                        <input type="number" id="addDutyCount" value="1" min="0" max="5" style="flex:2;">
+                    </div>
+                    <div class="attendance-note-actions">
+                        <button class="btn btn-secondary" id="addDutyCancel">取消</button>
+                        <button class="btn btn-primary" id="addDutySave">保存</button>
+                    </div>
+                </div>
+
                 <!-- =============== 系统设置页面 =============== -->
                 <section class="page hidden" data-page="settings">
                     <div class="content-header-bar">
@@ -716,6 +763,6 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     <!-- Supabase JS SDK（云端 PostgreSQL 持久化，未登录/离线时自动降级到 localStorage） -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="app.js?v=20260910-0400"></script>
+    <script src="app.js?v=20260910-0500"></script>
 </body>
 </html>

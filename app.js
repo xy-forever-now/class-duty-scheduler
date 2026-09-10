@@ -1,5 +1,5 @@
 /**
- * 班级工作台 - 智能排班系统 v20260910-0400
+ * 班级工作台 - 智能排班系统 v20260910-0500
  * 主要功能：
  * 1. Excel导入解析（识别姓名、性别）
  * 2. 智能排班算法（轮空+下周优先）
@@ -972,10 +972,174 @@ $('navToggle').addEventListener('click', () => {
 // ===== Excel 导入与解析 =====
 // 学生管理页面的"导入学生"按钮触发
 document.addEventListener('click', (e) => {
-    if (e.target && (e.target.id === 'btnImportStudents' || e.target.closest('#btnImportStudents'))) {
+    const t = e.target;
+    if (!t) return;
+    if (t.id === 'btnImportStudents' || t.closest('#btnImportStudents')) {
         $('fileInput').click();
     }
+    // 添加单个学生按钮
+    if (t.id === 'btnAddStudent' || t.closest('#btnAddStudent')) {
+        openAddStudentDialog();
+    }
+    // 添加职务按钮
+    if (t.id === 'btnAddDuty' || t.closest('#btnAddDuty')) {
+        openAddDutyDialog();
+    }
+    // 学生卡片删除按钮（事件委托）
+    if (t.classList && t.classList.contains('student-card-del')) {
+        e.stopPropagation();
+        e.preventDefault();
+        const idx = parseInt(t.dataset.idx);
+        if (!isNaN(idx)) deleteStudent(idx);
+        return;
+    }
+    // 职务 chip 删除按钮（事件委托）
+    const delDuty = t.classList && t.classList.contains('duty-chip-del') ? t : t.closest && t.closest('.duty-chip-del');
+    if (delDuty) {
+        e.stopPropagation();
+        e.preventDefault();
+        const chip = delDuty.closest('[data-duty-chip]');
+        const name = chip && chip.dataset.dutyChip;
+        if (name) deleteDuty(name);
+        return;
+    }
+    // 添加学生 dialog 按钮
+    if (t.id === 'addStudentCancel' || t.closest('#addStudentCancel')) closeAddStudentDialog();
+    if (t.id === 'addStudentSave' || t.closest('#addStudentSave')) submitAddStudent();
+    // 添加职务 dialog 按钮
+    if (t.id === 'addDutyCancel' || t.closest('#addDutyCancel')) closeAddDutyDialog();
+    if (t.id === 'addDutySave' || t.closest('#addDutySave')) submitAddDuty();
 });
+
+// 添加学生 dialog：姓名输入框回车 = 保存
+document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const ad = $('addStudentDialog');
+    if (ad && !ad.classList.contains('hidden') && (e.target.id === 'addStudentName' || e.target.id === 'addStudentGender')) {
+        e.preventDefault();
+        submitAddStudent();
+    }
+    const dd = $('addDutyDialog');
+    if (dd && !dd.classList.contains('hidden') && (e.target.id === 'addDutyName' || e.target.id === 'addDutyCount')) {
+        e.preventDefault();
+        submitAddDuty();
+    }
+});
+
+// ===== 手动添加单个学生 =====
+function openAddStudentDialog() {
+    const nameEl = $('addStudentName');
+    const genEl = $('addStudentGender');
+    if (nameEl) nameEl.value = '';
+    if (genEl) genEl.value = '男';
+    $('addStudentDialog')?.classList.remove('hidden');
+    setTimeout(() => nameEl?.focus(), 50);
+}
+function closeAddStudentDialog() {
+    $('addStudentDialog')?.classList.add('hidden');
+}
+function submitAddStudent() {
+    const nameEl = $('addStudentName');
+    const genEl = $('addStudentGender');
+    const raw = (nameEl?.value || '').trim();
+    if (!raw) { showToast('请填写姓名', 'warning'); nameEl?.focus(); return; }
+    if (raw.length > 20) { showToast('姓名过长（≤20 字）', 'warning'); return; }
+    const gender = genEl?.value || '';
+    // 去重：name+gender 完全相同的视为重复
+    const dup = state.students.find(s => s.name === raw && (s.gender || '') === gender);
+    if (dup) { showToast('该姓名+性别已存在，未重复添加', 'warning'); return; }
+    state.students.push({ name: raw, gender });
+    // 重置 name 框方便连续添加，保留 gender
+    if (nameEl) nameEl.value = '';
+    nameEl?.focus();
+    // 同步各页面
+    updateStudentStats();
+    updateSeatCapacity();
+    updateDutySlotInfo();
+    renderStudentManagementPage();
+    if ($('btnGenerate')) $('btnGenerate').disabled = state.students.length === 0;
+    saveStateDebounced();
+    showToast(`已添加：${raw}${gender ? '（' + gender + '）' : ''}`, 'success');
+}
+function deleteStudent(idx) {
+    if (isNaN(idx) || idx < 0 || idx >= state.students.length) return;
+    const s = state.students[idx];
+    if (!s) return;
+    const ok = window.confirm(`确认删除学生「${s.name}」？\n该操作会影响值班表与考勤统计。`);
+    if (!ok) return;
+    state.students.splice(idx, 1);
+    updateStudentStats();
+    updateSeatCapacity();
+    updateDutySlotInfo();
+    renderStudentManagementPage();
+    if (state.currentPage === 'rollcall') renderRollcallPage();
+    if ($('btnGenerate')) $('btnGenerate').disabled = state.students.length === 0;
+    saveStateDebounced();
+    showToast(`已删除：${s.name}`, 'success');
+}
+
+// ===== 手动添加值班职务 =====
+function openAddDutyDialog() {
+    const nameEl = $('addDutyName');
+    const countEl = $('addDutyCount');
+    if (nameEl) nameEl.value = '';
+    if (countEl) countEl.value = '1';
+    $('addDutyDialog')?.classList.remove('hidden');
+    setTimeout(() => nameEl?.focus(), 50);
+}
+function closeAddDutyDialog() {
+    $('addDutyDialog')?.classList.add('hidden');
+}
+function submitAddDuty() {
+    const nameEl = $('addDutyName');
+    const countEl = $('addDutyCount');
+    const raw = (nameEl?.value || '').trim();
+    if (!raw) { showToast('请填写职务名', 'warning'); nameEl?.focus(); return; }
+    if (raw.length > 20) { showToast('职务名过长（≤20 字）', 'warning'); return; }
+    // 去重
+    if (Object.prototype.hasOwnProperty.call(state.dutyCounts, raw)) {
+        showToast(`职务「${raw}」已存在`, 'warning');
+        return;
+    }
+    const count = Math.max(0, Math.min(5, parseInt(countEl?.value) || 1));
+    state.dutyCounts[raw] = count;
+    renderDutyChips();
+    updateDutySlotInfo();
+    saveStateDebounced();
+    showToast(`已添加职务：${raw}（${count} 人）`, 'success');
+    // 重置方便连续添加
+    if (nameEl) nameEl.value = '';
+    if (countEl) countEl.value = '1';
+    nameEl?.focus();
+}
+
+// ===== 删除值班职务 =====
+function deleteDuty(name) {
+    if (!Object.prototype.hasOwnProperty.call(state.dutyCounts, name)) return;
+    const ok = window.confirm(`确认删除职务「${name}」？\n已生成的值班表中该职务将不再出现。`);
+    if (!ok) return;
+    delete state.dutyCounts[name];
+    renderDutyChips();
+    updateDutySlotInfo();
+    saveStateDebounced();
+    showToast(`已删除职务：${name}`, 'success');
+}
+
+// ===== 重渲染值班职务 chips =====
+// state.dutyCounts 的 key 顺序就是 chip 渲染顺序；新职务添加后会追加在末尾，删除后从 DOM 移除
+function renderDutyChips() {
+    const wrap = $('dutyCheckboxes');
+    if (!wrap) return;
+    wrap.innerHTML = Object.keys(state.dutyCounts).map(name => {
+        const safe = name.replace(/[<>&"']/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+        const count = state.dutyCounts[name] || 0;
+        return `<span class="duty-chip" data-duty-chip="${safe}">
+            <span class="duty-chip-name">${safe}</span>
+            <input type="number" class="duty-count" data-duty="${safe}" value="${count}" min="0" max="5">
+            <button class="duty-chip-del" title="删除该职务">×</button>
+        </span>`;
+    }).join('');
+}
 
 $('fileInput').addEventListener('change', async (e) => {
     const file = e.target.files[0];
@@ -1146,6 +1310,7 @@ function renderStudentManagementPage() {
                 <input type="checkbox" class="rest-checkbox" data-idx="${idx}" ${resting ? 'checked' : ''}>
                 <span>${restLabel}</span>
             </label>
+            <button class="student-card-del" data-idx="${idx}" title="删除该学生">×</button>
         </div>`;
     }).join('');
 
@@ -2217,12 +2382,16 @@ function updateDutySlotInfo() {
     el.classList.toggle('warn', active > 0 && slots > active);
 }
 
-document.querySelectorAll('#dutyCheckboxes .duty-count').forEach(input => {
-    input.addEventListener('input', () => {
-        state.dutyCounts[input.dataset.duty] = parseInt(input.value) || 0;
-        updateDutySlotInfo();
-        saveStateDebounced();
-    });
+// 职务人数调整：事件委托，覆盖动态新增的 chip
+document.addEventListener('input', (e) => {
+    const t = e.target;
+    if (!t || !t.classList || !t.classList.contains('duty-count')) return;
+    if (!t.closest || !t.closest('#dutyCheckboxes')) return;
+    const name = t.dataset.duty;
+    const v = parseInt(t.value) || 0;
+    state.dutyCounts[name] = v;
+    updateDutySlotInfo();
+    saveStateDebounced();
 });
 
 function generateDutyTable() {

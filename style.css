@@ -661,6 +661,62 @@ body {
     text-align: center;
     font-size: 13px;
 }
+.duty-chip-del {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 16px;
+    line-height: 1;
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.duty-chip-del:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+.duty-chip-add {
+    margin-top: 8px;
+    padding: 4px 10px;
+    font-size: 12px;
+}
+
+/* 学生卡片删除按钮 */
+.student-card {
+    position: relative;
+}
+.student-card-del {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+    width: 22px;
+    height: 22px;
+    border: none;
+    background: transparent;
+    color: #d1d5db;
+    font-size: 18px;
+    line-height: 1;
+    border-radius: 50%;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+.student-card:hover .student-card-del {
+    opacity: 1;
+}
+.student-card-del:hover {
+    background: #fee2e2;
+    color: #b91c1c;
+}
 
 /* 坑位/人数提示 */
 .config-item-tip {
