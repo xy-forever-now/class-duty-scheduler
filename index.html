@@ -102,6 +102,18 @@
 
             <!-- 主内容区 -->
             <main class="main">
+                <!-- ===== 全局：云端同步工具栏（所有页面可见） ===== -->
+                <div class="cloud-toolbar">
+                    <button class="btn btn-secondary" id="btnCloudSync" title="从 Puter 云端拉取最新数据并覆盖本地">☁️ 云端同步（拉取覆盖）</button>
+                    <button class="btn btn-secondary" id="btnCloudPush" title="把当前本地数据主动推送到 Puter 云端">☁️ 上传本地到云端</button>
+                    <div class="cloud-status-bar" id="cloudStatusBar">
+                        <span class="cloud-status-icon" id="cloudStatusIcon">☁️</span>
+                        <span class="cloud-status-text" id="cloudStatusText">云端状态：检测中…</span>
+                        <label class="cloud-status-local-only" title="勾选后所有数据仅保存在本地浏览器，不上传云端">
+                            <input type="checkbox" id="cloudLocalOnly"> 仅本地存储（不走云端）
+                        </label>
+                    </div>
+                </div>
                 <!-- =============== 值班表页面（含排班配置） =============== -->
                 <section class="page" data-page="duty">
                     <div class="config-bar">

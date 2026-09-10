@@ -56,9 +56,11 @@ function showToast(msg, type = 'success') {
 // ===== 本地缓存（localStorage + Puter.js 云端 KV 双重持久化） =====
 const STORAGE_KEY = 'class-workbench.v1';
 const PUTER_KEY = 'class-workbench:v1:snapshot'; // Puter KV 上的键名
+const LOCAL_ONLY_KEY = 'class-workbench.v1.localOnly'; // 用户勾选"仅本地"时持久化
 
-// 是否就绪：window.puter 存在 + puter.kv 存在 + 用户已登录
+// 是否就绪：window.puter 存在 + puter.kv 存在 + 用户已登录 + 未勾选"仅本地"
 function puterReady() {
+    if (localOnlyMode()) return false;
     if (typeof window === 'undefined') return false;
     const p = window.puter;
     if (!p || !p.kv || typeof p.kv.get !== 'function') return false;
@@ -68,6 +70,19 @@ function puterReady() {
     } catch (err) {
         return false;
     }
+}
+
+// 用户是否勾选了"仅本地存储"
+function localOnlyMode() {
+    try { return localStorage.getItem(LOCAL_ONLY_KEY) === '1'; }
+    catch (err) { return false; }
+}
+
+function setLocalOnlyMode(enabled) {
+    try {
+        if (enabled) localStorage.setItem(LOCAL_ONLY_KEY, '1');
+        else localStorage.removeItem(LOCAL_ONLY_KEY);
+    } catch (err) { /* ignore */ }
 }
 
 function saveState() {
@@ -149,6 +164,7 @@ function syncFromPuter() {
         }
     }).catch(err => {
         console.warn('[cache] 读取云端失败：', err);
+        // 读取失败时仅记录，不打扰用户
     });
 }
 
@@ -166,6 +182,176 @@ function clearStoredState() {
 function setStatus(text) {
     $('statusText').textContent = text;
 }
+
+// ===== 云端同步：状态条 / 手动覆盖 / 启动登录 =====
+
+function updateCloudStatus(state, message) {
+    const text = $('cloudStatusText');
+    const icon = $('cloudStatusIcon');
+    if (!text || !icon) return;
+    text.classList.remove('is-online', 'is-offline', 'is-local-only', 'is-syncing', 'is-error');
+    if (state) text.classList.add(state);
+    text.textContent = message || '';
+    // 状态对应的图标
+    const iconMap = {
+        'is-online': '☁️✅',
+        'is-offline': '☁️⛔',
+        'is-local-only': '💾',
+        'is-syncing': '🔄',
+        'is-error': '⚠️',
+    };
+    icon.textContent = iconMap[state] || '☁️';
+}
+
+// 启动时刷新一次状态条（与 puterReady 配合）
+function refreshCloudStatus() {
+    if (localOnlyMode()) {
+        updateCloudStatus('is-local-only', '云端状态：仅本地存储（已关闭云端同步）');
+        return;
+    }
+    const p = window.puter;
+    if (!p || !p.kv || typeof p.kv.get !== 'function') {
+        updateCloudStatus('is-offline', '云端状态：Puter SDK 未加载，仅本地存储生效');
+        return;
+    }
+    let signedIn = false;
+    try { signedIn = p.auth && typeof p.auth.isSignedIn === 'function' ? p.auth.isSignedIn() === true : false; }
+    catch (err) { signedIn = false; }
+    if (signedIn) {
+        updateCloudStatus('is-online', '云端状态：已登录 Puter，自动实时同步中');
+    } else {
+        updateCloudStatus('is-offline', '云端状态：未登录 Puter，仅本地存储生效');
+    }
+}
+
+// 手动从云端拉取覆盖本地
+function manualPullFromCloud() {
+    if (localOnlyMode()) {
+        showToast('当前为"仅本地存储"模式，请先取消勾选', 'warning');
+        return;
+    }
+    const p = window.puter;
+    if (!p || !p.kv || typeof p.kv.get !== 'function') {
+        showToast('Puter SDK 未加载，无法同步', 'error');
+        return;
+    }
+    let signedIn = false;
+    try { signedIn = p.auth && typeof p.auth.isSignedIn === 'function' ? p.auth.isSignedIn() === true : false; }
+    catch (err) { signedIn = false; }
+    if (!signedIn) {
+        showToast('请先登录 Puter 再同步', 'warning');
+        promptSignInPuter();
+        return;
+    }
+
+    updateCloudStatus('is-syncing', '云端状态：正在从云端拉取…');
+    p.kv.get(PUTER_KEY).then(remote => {
+        if (!remote || typeof remote !== 'object') {
+            updateCloudStatus('is-online', '云端状态：云端暂无快照，无需覆盖');
+            showToast('云端暂无数据快照', 'info');
+            return;
+        }
+        const remoteTs = typeof remote.savedAt === 'number' ? remote.savedAt : 0;
+        const localRaw = localStorage.getItem(STORAGE_KEY);
+        const localTs = localRaw ? (JSON.parse(localRaw).savedAt || 0) : 0;
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(remote));
+        } catch (err) {
+            updateCloudStatus('is-error', '云端状态：写入本地失败');
+            showToast('写入本地失败：' + err.message, 'error');
+            return;
+        }
+        // 刷新页面让数据生效（最稳的做法，避免手工合并 state 出错）
+        showToast(`已从云端同步（云端 ${new Date(remoteTs).toLocaleString()} / 本地 ${new Date(localTs).toLocaleString()}），刷新页面查看`, 'success');
+        updateCloudStatus('is-online', `云端状态：已同步（${new Date(remoteTs).toLocaleString()}）`);
+        // 1.5s 后自动刷新页面让数据生效
+        setTimeout(() => location.reload(), 1500);
+    }).catch(err => {
+        console.warn('[cloud] 手动拉取失败：', err);
+        updateCloudStatus('is-error', '云端状态：拉取失败 ' + (err && err.message ? err.message : ''));
+        showToast('从云端拉取失败：' + (err && err.message ? err.message : ''), 'error');
+    });
+}
+
+// 主动推送本地到云端
+function manualPushToCloud() {
+    if (localOnlyMode()) {
+        showToast('当前为"仅本地存储"模式，无法推送', 'warning');
+        return;
+    }
+    if (!puterReady()) {
+        showToast('请先登录 Puter 再推送', 'warning');
+        promptSignInPuter();
+        return;
+    }
+    updateCloudStatus('is-syncing', '云端状态：正在上传本地到云端…');
+    // 先把当前 state 立即存到本地，再上传
+    saveState();
+    // saveState 已经异步发起了 kv.set；这里再 await 一次确保完成
+    const snapshot = (() => {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY)); } catch (err) { return null; }
+    })();
+    if (!snapshot) {
+        updateCloudStatus('is-error', '云端状态：本地无快照可上传');
+        showToast('本地无数据可上传', 'error');
+        return;
+    }
+    window.puter.kv.set(PUTER_KEY, snapshot).then(() => {
+        updateCloudStatus('is-online', `云端状态：已上传（${new Date(snapshot.savedAt).toLocaleString()}）`);
+        showToast('本地数据已上传到云端', 'success');
+    }).catch(err => {
+        console.warn('[cloud] 手动推送失败：', err);
+        updateCloudStatus('is-error', '云端状态：上传失败 ' + (err && err.message ? err.message : ''));
+        showToast('上传失败：' + (err && err.message ? err.message : ''), 'error');
+    });
+}
+
+// 弹出 Puter 登录
+function promptSignInPuter() {
+    const p = window.puter;
+    if (!p || !p.auth || typeof p.auth.signIn !== 'function') {
+        showToast('Puter 登录功能不可用', 'error');
+        return;
+    }
+    showToast('正在打开 Puter 登录窗口…', 'info');
+    Promise.resolve()
+        .then(() => p.auth.signIn())
+        .then(() => {
+            showToast('Puter 登录成功', 'success');
+            refreshCloudStatus();
+            // 登录后立即尝试同步一次
+            syncFromPuter();
+        })
+        .catch(err => {
+            console.warn('[cloud] 登录失败或取消：', err);
+            showToast('登录未完成：' + (err && err.message ? err.message : '已取消'), 'warning');
+            refreshCloudStatus();
+        });
+}
+
+// 启动时根据条件提示登录（仅在未勾选仅本地 + Puter 就绪 + 未登录时）
+function maybePromptCloudSignIn() {
+    if (localOnlyMode()) return;
+    const p = window.puter;
+    if (!p || !p.auth || typeof p.auth.signIn !== 'function') return;
+    let signedIn = false;
+    try { signedIn = p.auth.isSignedIn() === true; } catch (err) { signedIn = false; }
+    if (signedIn) return;
+    // 延迟到主流程渲染完成再提示，避免和首屏 toast 冲突
+    setTimeout(() => {
+        const choice = window.confirm(
+            '【云端数据存储提示】\n\n' +
+            '检测到您尚未登录 Puter。当前所有数据仅保存在本机浏览器，' +
+            '清理浏览器缓存或更换设备将导致数据丢失。\n\n' +
+            '点击「确定」登录 Puter 开启云端同步；\n' +
+            '点击「取消」保持纯本地模式（之后仍可在顶部"云端同步"按钮或勾选"仅本地存储"）。'
+        );
+        if (choice) promptSignInPuter();
+    }, 800);
+}
+
+// 把保存的快照合并回 state（在 init 之外不暴露，仅供调试/手动覆盖后用）
+// （目前由 location.reload 完成）
 
 // ===== 菜单路由 =====
 const pageTitles = {
@@ -2583,4 +2769,33 @@ document.addEventListener('click', (e) => {
 
     // 启动后尝试从 Puter 云端拉取最新快照（仅当云端比本地新时覆盖）
     syncFromPuter();
+
+    // 刷新云端状态条 + 未登录提示
+    refreshCloudStatus();
+    maybePromptCloudSignIn();
+
+    // 绑定云端同步按钮和"仅本地"勾选
+    const btnSync = $('btnCloudSync');
+    if (btnSync) {
+        btnSync.addEventListener('click', () => manualPullFromCloud());
+    }
+    const btnPush = $('btnCloudPush');
+    if (btnPush) {
+        btnPush.addEventListener('click', () => manualPushToCloud());
+    }
+    const cbLocalOnly = $('cloudLocalOnly');
+    if (cbLocalOnly) {
+        cbLocalOnly.checked = localOnlyMode();
+        cbLocalOnly.addEventListener('change', () => {
+            setLocalOnlyMode(cbLocalOnly.checked);
+            refreshCloudStatus();
+            if (!cbLocalOnly.checked) {
+                // 取消勾选：尝试拉一次云端数据并询问是否登录
+                syncFromPuter();
+                maybePromptCloudSignIn();
+            } else {
+                showToast('已切换为仅本地存储（云端将停止同步）', 'info');
+            }
+        });
+    }
 })();
