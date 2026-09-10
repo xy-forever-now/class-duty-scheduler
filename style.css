@@ -1632,6 +1632,9 @@ body {
     white-space: nowrap;
 }
 
+/* 一键全员出勤弹窗：让"快捷范围"占整行，三按钮宽度更舒展 */
+#attendanceAllPresentDialog .score-rules-grid { grid-template-columns: 1fr; }
+
 /* 表格行内复选框 + 名字同行 */
 .attendance-table .att-td-student { padding: 0 8px; }
 .att-student-check {
