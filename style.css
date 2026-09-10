@@ -62,7 +62,10 @@ body {
 }
 
 .nav-menu.collapsed .nav-toggle {
-    display: none;
+    display: flex;
+    background: white;
+    color: #4f46e5;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
 }
 
 .nav-header {
