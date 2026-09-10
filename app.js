@@ -1,5 +1,5 @@
 /**
- * 班级工作台 - 智能排班系统 v20260910-0700
+ * 班级工作台 - 智能排班系统 v20260910-0800
  * 主要功能：
  * 1. Excel导入解析（识别姓名、性别）
  * 2. 智能排班算法（轮空+下周优先）
@@ -1085,9 +1085,6 @@ function submitAddStudent() {
     const dup = state.students.find(s => s.name === raw && (s.gender || '') === gender);
     if (dup) { showToast('该姓名+性别已存在，未重复添加', 'warning'); return; }
     state.students.push({ name: raw, gender });
-    // 重置 name 框方便连续添加，保留 gender
-    if (nameEl) nameEl.value = '';
-    nameEl?.focus();
     // 同步各页面
     updateStudentStats();
     updateSeatCapacity();
@@ -1096,6 +1093,7 @@ function submitAddStudent() {
     if ($('btnGenerate')) $('btnGenerate').disabled = state.students.length === 0;
     saveStateDebounced();
     showToast(`已添加：${raw}${gender ? '（' + gender + '）' : ''}`, 'success');
+    closeAddStudentDialog();
 }
 function deleteStudent(idx) {
     if (isNaN(idx) || idx < 0 || idx >= state.students.length) return;
@@ -1143,10 +1141,7 @@ function submitAddDuty() {
     updateDutySlotInfo();
     saveStateDebounced();
     showToast(`已添加职务：${raw}（${count} 人）`, 'success');
-    // 重置方便连续添加
-    if (nameEl) nameEl.value = '';
-    if (countEl) countEl.value = '1';
-    nameEl?.focus();
+    closeAddDutyDialog();
 }
 
 // ===== 删除值班职务 =====
