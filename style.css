@@ -1621,11 +1621,16 @@ body {
 
 /* ===== 考勤增强 ===== */
 .att-quick-range {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
-    flex-wrap: wrap;
 }
-.att-quick-range .btn { flex: 1; min-width: 0; }
+.att-quick-range .btn {
+    min-width: 0;
+    padding: 6px 8px;
+    font-size: 12px;
+    white-space: nowrap;
+}
 
 /* 表格行内复选框 + 名字同行 */
 .attendance-table .att-td-student { padding: 0 8px; }
